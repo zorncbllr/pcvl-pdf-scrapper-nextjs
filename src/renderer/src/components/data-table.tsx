@@ -123,7 +123,7 @@ const columns: ColumnDef<Voter>[] = [
               voterId: raw.voterId,
               value: !!value,
             });
-            setColumnFilters((prev) => [...prev]);
+            table.setColumnFilters((prev) => [...prev]);
           }}
           aria-label="Select row"
           className={
