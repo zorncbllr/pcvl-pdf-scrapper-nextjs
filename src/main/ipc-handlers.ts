@@ -8,6 +8,10 @@ export function registerIpcHandlers(mainWindow: BrowserWindow) {
     return voterService.getVoters();
   });
 
+  ipcMain.handle("barangay-precincts:get-all", async () => {
+    return voterService.getBarangayPrecincts();
+  });
+
   ipcMain.handle("voters:import-pdf", async () => {
     const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
       filters: [{ name: "PDF Files", extensions: ["pdf"] }],
@@ -36,7 +40,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow) {
 
   ipcMain.handle(
     "voters:add",
-    async (_, data: { name: string; precinct: string }) => {
+    async (_, data: { name: string; precinct: string; barangay?: string }) => {
       return voterService.addVoter(data);
     }
   );
@@ -53,8 +57,15 @@ export function registerIpcHandlers(mainWindow: BrowserWindow) {
   );
 
   ipcMain.handle(
+    "voters:update-all-status",
+    async (_, data: { voterIds: number[]; value: boolean }) => {
+      return voterService.updateAllStatus(data);
+    }
+  );
+
+  ipcMain.handle(
     "voters:update",
-    async (_, data: { voterId: number; name: string; precinct: string }) => {
+    async (_, data: { voterId: number; name: string; precinct: string; barangay?: string }) => {
       return voterService.updateVoter(data);
     }
   );

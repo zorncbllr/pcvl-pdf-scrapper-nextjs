@@ -2,15 +2,19 @@ import { contextBridge, ipcRenderer } from "electron";
 
 const api = {
   getVoters: () => ipcRenderer.invoke("voters:get-all"),
+  getBarangayPrecincts: () =>
+    ipcRenderer.invoke("barangay-precincts:get-all"),
   importPDF: () => ipcRenderer.invoke("voters:import-pdf"),
   exportExcel: (data?: { onlySelected?: boolean }) =>
     ipcRenderer.invoke("voters:export-excel", data),
-  addVoter: (data: { name: string; precinct: string }) =>
+  addVoter: (data: { name: string; precinct: string; barangay?: string }) =>
     ipcRenderer.invoke("voters:add", data),
   clearVoters: () => ipcRenderer.invoke("voters:clear"),
   updateStatus: (data: { voterId: number; value: boolean }) =>
     ipcRenderer.invoke("voters:update-status", data),
-  updateVoter: (data: { voterId: number; name: string; precinct: string }) =>
+  updateAllStatus: (data: { voterIds: number[]; value: boolean }) =>
+    ipcRenderer.invoke("voters:update-all-status", data),
+  updateVoter: (data: { voterId: number; name: string; precinct: string; barangay?: string }) =>
     ipcRenderer.invoke("voters:update", data),
   deleteVoter: (data: { voterId: number }) =>
     ipcRenderer.invoke("voters:delete", data),

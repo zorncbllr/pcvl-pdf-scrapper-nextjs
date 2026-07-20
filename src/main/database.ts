@@ -15,9 +15,22 @@ export function initDatabase(): Database.Database {
       voterId INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
       precinct TEXT NOT NULL,
+      barangay TEXT NOT NULL DEFAULT '',
       isGiven INTEGER NOT NULL DEFAULT 0,
       UNIQUE(name, precinct)
     )
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS barangay_precinct (
+      precinct TEXT PRIMARY KEY,
+      barangay TEXT NOT NULL
+    )
+  `);
+
+  db.exec(`
+    INSERT OR IGNORE INTO barangay_precinct (precinct, barangay)
+    SELECT DISTINCT precinct, barangay FROM voter WHERE precinct != '' AND barangay != ''
   `);
 
   return db;

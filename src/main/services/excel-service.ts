@@ -5,6 +5,7 @@ interface VoterRow {
   voterId: number;
   name: string;
   precinct: string;
+  barangay: string;
   isGiven: number;
 }
 
@@ -30,13 +31,15 @@ export async function exportExcel(savePath: string, onlySelected = false) {
 
     workSheet.getCell("A1").value = "VOTER ID";
     workSheet.getCell("B1").value = "NAME";
-    workSheet.getCell("C1").value = "PRECINCT";
+    workSheet.getCell("C1").value = "BARANGAY";
+    workSheet.getCell("D1").value = "PRECINCT";
 
     workSheet.getColumn(1).width = 25;
     workSheet.getColumn(2).width = 50;
-    workSheet.getColumn(3).width = 25;
+    workSheet.getColumn(3).width = 30;
+    workSheet.getColumn(4).width = 25;
 
-    ["A1", "B1", "C1"].forEach((cellRef) => {
+    ["A1", "B1", "C1", "D1"].forEach((cellRef) => {
       const cell = workSheet.getCell(cellRef);
       cell.alignment = { horizontal: "center", vertical: "middle" };
       cell.font = { bold: true, size: 14 };
@@ -46,9 +49,10 @@ export async function exportExcel(savePath: string, onlySelected = false) {
       const row = i + 2;
       workSheet.getCell(`A${row}`).value = voters[i].voterId;
       workSheet.getCell(`B${row}`).value = voters[i].name;
-      workSheet.getCell(`C${row}`).value = voters[i].precinct;
+      workSheet.getCell(`C${row}`).value = voters[i].barangay;
+      workSheet.getCell(`D${row}`).value = voters[i].precinct;
 
-      [`A${row}`, `B${row}`, `C${row}`].forEach((cellRef) => {
+      [`A${row}`, `B${row}`, `C${row}`, `D${row}`].forEach((cellRef) => {
         const cell = workSheet.getCell(cellRef);
         cell.alignment = { horizontal: "left", vertical: "middle" };
         cell.font = { bold: true, size: 12 };

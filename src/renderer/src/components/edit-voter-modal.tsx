@@ -32,6 +32,7 @@ const voterSchema = z.object({
       /^[A-Z][a-zA-Z'-]+(?: [A-Z][a-zA-Z'-]+)*(?: (?:Jr\.?|Sr\.?|I{1,3}|IV))?, [A-Z][a-zA-Z'-]+(?: [A-Z][a-zA-Z'-]+)*(?: (?:Jr\.?|Sr\.?|I{1,3}|IV))?(?: [A-Z][a-zA-Z'-]+)?$/,
       "Invalid name format. Use: LASTNAME, FIRSTNAME MIDDLENAME"
     ),
+  barangay: z.string().optional(),
   precinct: z
     .string()
     .regex(
@@ -49,6 +50,7 @@ export default function EditVoterModal() {
     resolver: zodResolver(voterSchema),
     defaultValues: {
       name: "",
+      barangay: "",
       precinct: "",
     },
   });
@@ -57,6 +59,7 @@ export default function EditVoterModal() {
     if (editingVoter && openEdit) {
       form.reset({
         name: editingVoter.name,
+        barangay: editingVoter.barangay || "",
         precinct: editingVoter.precinct,
       });
       setSaving(false);
@@ -151,6 +154,29 @@ export default function EditVoterModal() {
                         </FormControl>
                         <FormDescription>
                           Enter the full name of the voter.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="barangay"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Barangay</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="AMBOLONG"
+                            {...field}
+                            onChange={(e) =>
+                              field.onChange(e.target.value.toUpperCase())
+                            }
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          Enter the voter's barangay (optional).
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
