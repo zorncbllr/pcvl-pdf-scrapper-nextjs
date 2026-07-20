@@ -2,6 +2,7 @@ import { ipcMain, dialog, shell, BrowserWindow } from "electron";
 import * as voterService from "./services/voter-service";
 import * as pdfService from "./services/pdf-service";
 import * as excelService from "./services/excel-service";
+import * as excelPersistenceService from "./services/excel-persistence-service";
 
 export function registerIpcHandlers(mainWindow: BrowserWindow) {
   ipcMain.handle("voters:get-all", async () => {
@@ -22,6 +23,20 @@ export function registerIpcHandlers(mainWindow: BrowserWindow) {
     }
     return pdfService.importPDF(filePaths[0]);
   });
+
+  ipcMain.handle("voters:read-excel", async (_, data: number[]) => {
+    return excelService.readExcelFile(Buffer.from(data));
+  });
+
+  ipcMain.handle(
+    "voters:read-excel-sheet",
+    async (_, payload: { data: number[]; sheetName: string }) => {
+      return excelService.readSheetData(
+        Buffer.from(payload.data),
+        payload.sheetName,
+      );
+    },
+  );
 
   ipcMain.handle(
     "voters:export-excel",
@@ -80,5 +95,33 @@ export function registerIpcHandlers(mainWindow: BrowserWindow) {
   ipcMain.handle("shell:open-path", async (_, filePath: string) => {
     const error = await shell.openPath(filePath);
     return { success: error === "", msg: error };
+  });
+
+  ipcMain.handle(
+    "excel-file:save",
+    async (
+      _,
+      data: {
+        buffer: number[];
+        fileName: string;
+        sheets: string[];
+        activeSheet: string;
+      },
+    ) => {
+      excelPersistenceService.saveExcelFile(
+        data.buffer,
+        data.fileName,
+        data.sheets,
+        data.activeSheet,
+      );
+    },
+  );
+
+  ipcMain.handle("excel-file:load", async () => {
+    return excelPersistenceService.loadExcelFile();
+  });
+
+  ipcMain.handle("excel-file:delete", async () => {
+    excelPersistenceService.deleteExcelFile();
   });
 }

@@ -38,7 +38,29 @@ export interface ElectronAPI {
   deleteVoter: (data: {
     voterId: number;
   }) => Promise<{ msg: string; success: boolean }>;
+  readExcel: (data: number[]) => Promise<{ sheets: string[] }>;
+  readExcelSheet: (payload: {
+    data: number[];
+    sheetName: string;
+  }) => Promise<{
+    headers: string[];
+    rows: string[][];
+    merges: { row: number; col: number; rowspan: number; colspan: number }[];
+  }>;
   openPath: (filePath: string) => Promise<{ success: boolean; msg: string }>;
+  saveExcelFile: (data: {
+    buffer: number[];
+    fileName: string;
+    sheets: string[];
+    activeSheet: string;
+  }) => Promise<void>;
+  loadExcelFile: () => Promise<{
+    buffer: number[];
+    fileName: string;
+    sheets: string[];
+    activeSheet: string;
+  } | null>;
+  deleteExcelFile: () => Promise<void>;
 }
 
 declare global {

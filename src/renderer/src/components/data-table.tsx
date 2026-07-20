@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import type { Row } from "@tanstack/react-table";
 import {
   ColumnDef,
@@ -12,7 +13,7 @@ import {
   getSortedRowModel,
   useReactTable,
 } from "@tanstack/react-table";
-import { Check, ChevronDown, Pencil, SearchIcon, Trash2 } from "lucide-react";
+import { Check, ChevronDown, SearchIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -22,6 +23,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Popover,
   PopoverContent,
@@ -59,21 +67,16 @@ import ClearButton from "./clear-button";
 import { Checkbox } from "@/components/ui/checkbox";
 import ImportButton from "./import-button";
 import AddButton from "./add-button";
-import { useModalStore } from "@/stores/modal-store";
+import ActionsCell from "./actions-cell";
 
-function ActionsCell({ voter }: { voter: Voter }) {
-  const { setEditVoter, setDeleteVoter } = useModalStore();
-
-  return (
-    <div className="flex gap-1">
-      <Button variant="ghost" size="sm" onClick={() => setEditVoter(voter)}>
-        <Pencil className="size-4" />
-      </Button>
-      <Button variant="ghost" size="sm" onClick={() => setDeleteVoter(voter)}>
-        <Trash2 className="size-4" />
-      </Button>
-    </div>
-  );
+function colFlex(id: string): string {
+  switch (id) {
+    case "select": return "0 0 40px";
+    case "voterId": return "0 0 100px";
+    case "barangay": return "0 0 160px";
+    case "precinct": return "0 0 100px";
+    default: return "1 1 0";
+  }
 }
 
 const columns: ColumnDef<Voter>[] = [
@@ -101,8 +104,14 @@ const columns: ColumnDef<Voter>[] = [
         />
       );
     },
-    cell: ({ row }) => {
+    cell: ({ row, table }) => {
       const raw = row.original;
+      const gf = table.getState().globalFilter;
+      const highlighted =
+        gf &&
+        String(row.getValue("name") ?? "")
+          .toLowerCase()
+          .includes(String(gf).toLowerCase());
 
       return (
         <Checkbox
@@ -116,6 +125,11 @@ const columns: ColumnDef<Voter>[] = [
             });
           }}
           aria-label="Select row"
+          className={
+            highlighted
+              ? "border-primary-foreground/70 data-[state=checked]:bg-primary-foreground data-[state=checked]:text-primary"
+              : undefined
+          }
         />
       );
     },
@@ -139,11 +153,11 @@ const columns: ColumnDef<Voter>[] = [
         barangayToPrecincts: Record<string, string[]>;
         precinctToBarangays: Record<string, string[]>;
       };
-      const selectedPrecinct = table
-        .getColumn("precinct")
-        ?.getFilterValue() as string | undefined;
+      const selectedPrecinct = table.getColumn("precinct")?.getFilterValue() as
+        | string
+        | undefined;
       const barangayOptions = selectedPrecinct
-        ? meta.precinctToBarangays[selectedPrecinct] ?? []
+        ? (meta.precinctToBarangays[selectedPrecinct] ?? [])
         : meta.barangayOptions;
       const [open, setOpen] = React.useState(false);
       const value = column.getFilterValue() as string | undefined;
@@ -184,9 +198,7 @@ const columns: ColumnDef<Voter>[] = [
                     value={b}
                     onSelect={() => {
                       column.setFilterValue(b);
-                      table
-                        .getColumn("precinct")
-                        ?.setFilterValue(undefined);
+                      table.getColumn("precinct")?.setFilterValue(undefined);
                       setOpen(false);
                     }}
                   >
@@ -214,11 +226,11 @@ const columns: ColumnDef<Voter>[] = [
         barangayToPrecincts: Record<string, string[]>;
         precinctToBarangays: Record<string, string[]>;
       };
-      const selectedBarangay = table
-        .getColumn("barangay")
-        ?.getFilterValue() as string | undefined;
+      const selectedBarangay = table.getColumn("barangay")?.getFilterValue() as
+        | string
+        | undefined;
       const precinctOptions = selectedBarangay
-        ? meta.barangayToPrecincts[selectedBarangay] ?? []
+        ? (meta.barangayToPrecincts[selectedBarangay] ?? [])
         : meta.precinctOptions;
       const [open, setOpen] = React.useState(false);
       const value = column.getFilterValue() as string | undefined;
@@ -261,9 +273,7 @@ const columns: ColumnDef<Voter>[] = [
                       column.setFilterValue(p);
                       table
                         .getColumn("barangay")
-                        ?.setFilterValue(
-                          meta.precinctToBarangays[p]?.[0],
-                        );
+                        ?.setFilterValue(meta.precinctToBarangays[p]?.[0]);
                       setOpen(false);
                     }}
                   >
@@ -284,6 +294,16 @@ const columns: ColumnDef<Voter>[] = [
     },
   },
   {
+    accessorKey: "isGiven",
+    enableSorting: false,
+    enableGlobalFilter: false,
+    filterFn: (row, _columnId, filterValue: string) => {
+      if (filterValue === "selected") return row.getValue("isGiven");
+      if (filterValue === "unselected") return !row.getValue("isGiven");
+      return true;
+    },
+  },
+  {
     id: "actions",
     header: "Actions",
     cell: ({ row }) => <ActionsCell voter={row.original} />,
@@ -293,14 +313,44 @@ const columns: ColumnDef<Voter>[] = [
   },
 ];
 
-export function DataTable({ data }: { data: Voter[] }) {
+export function DataTable({
+  data,
+  showActions = true,
+  simple,
+  searchQuery,
+  statusFilter,
+  toggleHighlightedRow,
+}: {
+  data: Voter[];
+  showActions?: boolean;
+  simple?: boolean;
+  searchQuery?: string;
+  statusFilter?: string;
+  toggleHighlightedRow?: number;
+}) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
-  const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
-    [],
-  );
-  const [globalFilter, setGlobalFilter] = React.useState("");
+  const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(() => {
+    const filters: ColumnFiltersState = [];
+    if (statusFilter && statusFilter !== "all") {
+      filters.push({ id: "isGiven", value: statusFilter });
+    }
+    return filters;
+  });
+  const [globalFilter, setGlobalFilter] = React.useState(searchQuery ?? "");
+  React.useEffect(() => {
+    if (searchQuery !== undefined) setGlobalFilter(searchQuery);
+  }, [searchQuery]);
+  React.useEffect(() => {
+    setColumnFilters((prev) => {
+      const filtered = prev.filter((f) => f.id !== "isGiven");
+      if (statusFilter && statusFilter !== "all") {
+        return [...filtered, { id: "isGiven", value: statusFilter }];
+      }
+      return filtered;
+    });
+  }, [statusFilter]);
   const [columnVisibility, setColumnVisibility] =
-    React.useState<VisibilityState>({});
+    React.useState<VisibilityState>({ isGiven: false });
   const [rowSelection, setRowSelection] = React.useState<
     Record<string, boolean>
   >(() => {
@@ -328,7 +378,8 @@ export function DataTable({ data }: { data: Voter[] }) {
     data.forEach((v) => {
       if (!v.barangay || !v.precinct) return;
       if (!map[v.barangay]) map[v.barangay] = [];
-      if (!map[v.barangay].includes(v.precinct)) map[v.barangay].push(v.precinct);
+      if (!map[v.barangay].includes(v.precinct))
+        map[v.barangay].push(v.precinct);
     });
     return map;
   }, [data]);
@@ -338,18 +389,30 @@ export function DataTable({ data }: { data: Voter[] }) {
     data.forEach((v) => {
       if (!v.barangay || !v.precinct) return;
       if (!map[v.precinct]) map[v.precinct] = [];
-      if (!map[v.precinct].includes(v.barangay)) map[v.precinct].push(v.barangay);
+      if (!map[v.precinct].includes(v.barangay))
+        map[v.precinct].push(v.barangay);
     });
     return map;
   }, [data]);
 
+  const simpleColumns = React.useMemo(
+    () => columns.filter((c) => c.id !== "actions"),
+    [],
+  );
+
   const table = useReactTable({
     data,
-    columns,
+    columns: simple
+      ? simpleColumns
+      : showActions
+        ? columns
+        : columns.filter((c) => c.id !== "actions"),
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     getCoreRowModel: getCoreRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
+    ...(simple
+      ? {}
+      : { getPaginationRowModel: getPaginationRowModel() }),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     onColumnVisibilityChange: setColumnVisibility,
@@ -405,6 +468,121 @@ export function DataTable({ data }: { data: Voter[] }) {
     },
   });
 
+  React.useEffect(() => {
+    if (!toggleHighlightedRow || !globalFilter) return;
+    const filteredRows = table.getRowModel().rows;
+    if (filteredRows.length === 0) return;
+    const row = filteredRows[0];
+    const newValue = !row.getIsSelected();
+    setRowSelection((prev) => {
+      const next = { ...prev };
+      if (newValue) {
+        next[row.id] = true;
+      } else {
+        delete next[row.id];
+      }
+      return next;
+    });
+    row.original.isGiven = newValue;
+    window.electronAPI.updateStatus({
+      voterId: row.original.voterId,
+      value: newValue,
+    });
+  }, [toggleHighlightedRow]);
+
+  const parentRef = React.useRef<HTMLDivElement>(null);
+  const rows = table.getRowModel().rows;
+  const virtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 36,
+    overscan: 5,
+  });
+
+  if (simple) {
+    const virtualRows = virtualizer.getVirtualItems();
+    const headerGroup = table.getHeaderGroups()[0];
+    return (
+      <div className="w-full h-full text-sm">
+        <div ref={parentRef} className="rounded-md border h-full overflow-auto">
+          <div className="sticky top-0 z-10 bg-background flex border-b min-w-0">
+            {headerGroup.headers.map((header) => (
+              <div
+                key={header.id}
+                className="h-10 px-2 flex items-center font-medium text-muted-foreground whitespace-nowrap border-r last:border-r-0 min-w-0"
+                style={{ flex: colFlex(header.column.id) }}
+              >
+                {header.isPlaceholder
+                  ? null
+                  : flexRender(
+                      header.column.columnDef.header,
+                      header.getContext(),
+                    )}
+              </div>
+            ))}
+          </div>
+          <div
+            style={{ height: `${virtualizer.getTotalSize()}px`, position: "relative" }}
+          >
+            {rows.length === 0 ? (
+              <div className="h-24 flex items-center justify-center text-muted-foreground">
+                No results.
+              </div>
+            ) : (
+              virtualRows.map((virtualRow) => {
+                const row = rows[virtualRow.index];
+                const rowHighlighted =
+                  globalFilter &&
+                  rows.findIndex(
+                    (r) =>
+                      String(r.getValue("name") ?? "")
+                        .toLowerCase()
+                        .includes(String(globalFilter).toLowerCase()),
+                  ) === virtualRow.index;
+                return (
+                  <div
+                    key={row.id}
+                    className={cn(
+                      "flex border-b transition-colors",
+                      row.getIsSelected() && !rowHighlighted && "bg-muted",
+                      rowHighlighted
+                        ? "bg-primary text-primary-foreground"
+                        : "hover:bg-muted/50",
+                    )}
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      width: "100%",
+                      height: "36px",
+                      transform: `translateY(${virtualRow.start}px)`,
+                    }}
+                  >
+                    {row.getVisibleCells().map((cell) => (
+                      <div
+                        key={cell.id}
+                        className={cn(
+                          "p-2 flex items-center border-r last:border-r-0 whitespace-nowrap min-w-0",
+                          cell.column.id === "select" && "justify-center",
+                        )}
+                        style={{ flex: colFlex(cell.column.id) }}
+                      >
+                        {flexRender(
+                          cell.column.columnDef.cell,
+                          cell.getContext(),
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="w-full">
       <div className="flex items-center justify-between py-4">
@@ -418,16 +596,32 @@ export function DataTable({ data }: { data: Voter[] }) {
               className="w-full border-0 bg-transparent pl-8 ring-0 focus-visible:ring-0 focus-visible:ring-offset-0"
             />
           </div>
+          <Select
+            value={
+              (table.getColumn("isGiven")?.getFilterValue() as string) ??
+              "all"
+            }
+            onValueChange={(value) =>
+              table
+                .getColumn("isGiven")
+                ?.setFilterValue(value === "all" ? undefined : value)
+            }
+          >
+            <SelectTrigger className="w-[140px]">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="selected">Selected</SelectItem>
+              <SelectItem value="unselected">Unselected</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
         <div className="flex gap-2 items-center">
           <ExportButton />
-
           <ImportButton />
-
           <AddButton />
-
           <ClearButton />
-
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" className="ml-auto">
@@ -438,20 +632,18 @@ export function DataTable({ data }: { data: Voter[] }) {
               {table
                 .getAllColumns()
                 .filter((column) => column.getCanHide())
-                .map((column) => {
-                  return (
-                    <DropdownMenuCheckboxItem
-                      key={column.id}
-                      className="capitalize"
-                      checked={column.getIsVisible()}
-                      onCheckedChange={(value) =>
-                        column.toggleVisibility(!!value)
-                      }
-                    >
-                      {column.id}
-                    </DropdownMenuCheckboxItem>
-                  );
-                })}
+                .map((column) => (
+                  <DropdownMenuCheckboxItem
+                    key={column.id}
+                    className="capitalize"
+                    checked={column.getIsVisible()}
+                    onCheckedChange={(value) =>
+                      column.toggleVisibility(!!value)
+                    }
+                  >
+                    {column.id}
+                  </DropdownMenuCheckboxItem>
+                ))}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -461,18 +653,16 @@ export function DataTable({ data }: { data: Voter[] }) {
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id}>
-                {headerGroup.headers.map((header) => {
-                  return (
-                    <TableHead key={header.id}>
-                      {header.isPlaceholder
-                        ? null
-                        : flexRender(
-                            header.column.columnDef.header,
-                            header.getContext(),
-                          )}
-                    </TableHead>
-                  );
-                })}
+                {headerGroup.headers.map((header) => (
+                  <TableHead key={header.id}>
+                    {header.isPlaceholder
+                      ? null
+                      : flexRender(
+                          header.column.columnDef.header,
+                          header.getContext(),
+                        )}
+                  </TableHead>
+                ))}
               </TableRow>
             ))}
           </TableHeader>
@@ -506,7 +696,7 @@ export function DataTable({ data }: { data: Voter[] }) {
           </TableBody>
         </Table>
       </div>
-      <div className="flex items-center justify-between pt-6">
+      <div className="flex items-center justify-between py-4">
         <div className="text-sm text-muted-foreground">
           {table.getFilteredSelectedRowModel().rows.length} of{" "}
           {table.getFilteredRowModel().rows.length} row(s) selected.

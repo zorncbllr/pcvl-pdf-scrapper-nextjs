@@ -1,5 +1,116 @@
-import { getDatabase } from "../database";
 import { Workbook } from "exceljs";
+
+function colToNum(col: string): number {
+  let n = 0;
+  for (const c of col) n = n * 26 + (c.charCodeAt(0) - 64);
+  return n;
+}
+
+function parseCellRef(ref: string): { row: number; col: number } {
+  const m = ref.match(/^([A-Z]+)(\d+)$/);
+  if (!m) return { row: 0, col: 0 };
+  return { col: colToNum(m[1]), row: parseInt(m[2], 10) };
+}
+
+export interface MergeRange {
+  row: number;
+  col: number;
+  rowspan: number;
+  colspan: number;
+}
+
+function getMerges(ws: any): MergeRange[] {
+  const raw: any[] = ws.model?.merges ?? [];
+  return raw
+    .map((m: any) => {
+      // exceljs stores ranges as { from: {row, col}, to: {row, col} } objects
+      if (m.from && m.to) {
+        const top = Math.min(m.from.row, m.to.row);
+        const left = Math.min(m.from.col, m.to.col);
+        return {
+          row: top,
+          col: left,
+          rowspan: Math.max(m.from.row, m.to.row) - top + 1,
+          colspan: Math.max(m.from.col, m.to.col) - left + 1,
+        };
+      }
+      // fallback: parse string range like "A1:D1"
+      if (typeof m === "string") {
+        const [a, b] = m.split(":");
+        const tl = parseCellRef(a);
+        const br = b ? parseCellRef(b) : tl;
+        return {
+          row: Math.min(tl.row, br.row),
+          col: Math.min(tl.col, br.col),
+          rowspan: Math.abs(tl.row - br.row) + 1,
+          colspan: Math.abs(tl.col - br.col) + 1,
+        };
+      }
+      return null;
+    })
+    .filter(Boolean) as MergeRange[];
+}
+
+export async function readExcelFile(data: Buffer): Promise<{ sheets: string[] }> {
+  const wb = new Workbook();
+  await wb.xlsx.load(data);
+  return { sheets: wb.worksheets.map((ws) => ws.name) };
+}
+
+export async function readSheetData(
+  data: Buffer,
+  sheetName: string,
+): Promise<{ headers: string[]; rows: string[][]; merges: MergeRange[] }> {
+  const wb = new Workbook();
+  await wb.xlsx.load(data);
+
+  const ws = wb.getWorksheet(sheetName);
+  if (!ws) return { headers: [], rows: [], merges: [] };
+
+  const merges = getMerges(ws);
+
+  const limit = Math.min(ws.rowCount, 101);
+  if (limit < 1) return { headers: [], rows: [], merges };
+
+  let colCount = 0;
+  for (let r = 1; r <= limit; r++) {
+    let lastCol = 0;
+    ws.getRow(r).eachCell((cell, colNumber) => {
+      if (cell.type) lastCol = colNumber;
+    });
+    if (lastCol > colCount) colCount = lastCol;
+  }
+  if (colCount < 1) return { headers: [], rows: [], merges };
+
+  const headers: string[] = new Array(colCount).fill("");
+  ws.getRow(1).eachCell((cell, colNumber) => {
+    if (cell.type) {
+      try {
+        headers[colNumber - 1] = cell.text?.toString() ?? "";
+      } catch {
+        headers[colNumber - 1] = "";
+      }
+    }
+  });
+
+  const rows: string[][] = [];
+  for (let r = 2; r <= limit; r++) {
+    const row = ws.getRow(r);
+    const values: string[] = new Array(colCount).fill("");
+    row.eachCell((cell, colNumber) => {
+      if (cell.type) {
+        try {
+          values[colNumber - 1] = cell.text?.toString() ?? "";
+        } catch {
+          values[colNumber - 1] = "";
+        }
+      }
+    });
+    rows.push(values);
+  }
+
+  return { headers, rows, merges };
+}
 
 interface VoterRow {
   voterId: number;
@@ -11,6 +122,7 @@ interface VoterRow {
 
 export async function exportExcel(savePath: string, onlySelected = false) {
   try {
+    const { getDatabase } = await import("../database");
     const db = getDatabase();
     const query = onlySelected
       ? "SELECT * FROM voter WHERE isGiven = 1"
@@ -66,7 +178,6 @@ export async function exportExcel(savePath: string, onlySelected = false) {
         }
       });
     }
-
     await workBook.xlsx.writeFile(savePath);
 
     return {
