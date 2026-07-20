@@ -123,6 +123,7 @@ const columns: ColumnDef<Voter>[] = [
               voterId: raw.voterId,
               value: !!value,
             });
+            setColumnFilters((prev) => [...prev]);
           }}
           aria-label="Select row"
           className={
@@ -298,8 +299,8 @@ const columns: ColumnDef<Voter>[] = [
     enableSorting: false,
     enableGlobalFilter: false,
     filterFn: (row, _columnId, filterValue: string) => {
-      if (filterValue === "selected") return row.getValue("isGiven");
-      if (filterValue === "unselected") return !row.getValue("isGiven");
+      if (filterValue === "selected") return row.getIsSelected();
+      if (filterValue === "unselected") return !row.getIsSelected();
       return true;
     },
   },
@@ -445,6 +446,7 @@ export function DataTable({
           voterIds: rows.map((r) => r.original.voterId),
           value,
         });
+        setColumnFilters((prev) => [...prev]);
       },
     } as {
       barangayOptions: string[];
@@ -488,6 +490,7 @@ export function DataTable({
       voterId: row.original.voterId,
       value: newValue,
     });
+    setColumnFilters((prev) => [...prev]);
   }, [toggleHighlightedRow]);
 
   const parentRef = React.useRef<HTMLDivElement>(null);
