@@ -7,9 +7,9 @@ import {
   ChangeEvent,
   MouseEvent,
 } from "react";
-import { FileSpreadsheet, AlertCircle, Check } from "lucide-react";
+import { FileSpreadsheet, AlertCircle, Check, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { cn, wordsMatch } from "@/lib/utils";
 
 const ACCEPTED_EXT = [".xlsx", ".xls", ".csv"];
 
@@ -31,6 +31,7 @@ interface ExcelDropzoneProps {
   searchQuery?: string;
   statusFilter?: string;
   selectedRowIds?: number[];
+  onCellSearch?: (value: string) => void;
 }
 
 function isExcelFile(file: File): boolean {
@@ -48,6 +49,7 @@ export default function ExcelDropzone({
   searchQuery,
   statusFilter,
   selectedRowIds,
+  onCellSearch,
 }: ExcelDropzoneProps) {
   const [file, setFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -219,9 +221,7 @@ export default function ExcelDropzone({
                   );
                   const filteredEntries = Array.from(preview.rows.entries())
                     .filter(([, row]) =>
-                      !q || row.some((cell) =>
-                        cell.toLowerCase().includes(q),
-                      ),
+                      !q || row.some((cell) => wordsMatch(cell, searchQuery!)),
                     )
                     .filter(([ri]) =>
                       !statusFilter || statusFilter === "all" ||
@@ -302,11 +302,19 @@ export default function ExcelDropzone({
                                         colSpan={merge.colspan}
                                         rowSpan={merge.rowspan}
                                         className={cn(
-                                          "p-2 align-middle border-r last:border-r-0 whitespace-nowrap",
+                                          "p-2 align-middle border-r last:border-r-0 whitespace-nowrap group relative",
                                           isColHeaderRow && "font-medium text-muted-foreground",
                                         )}
                                       >
-                                        {cell}
+                                        <span className="truncate block">{cell}</span>
+                                        {onCellSearch && cell && (
+                                          <button
+                                            onClick={(e) => { e.stopPropagation(); onCellSearch(cell.trim()); }}
+                                            className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-muted-foreground/20"
+                                          >
+                                            <Search className="h-3 w-3 text-muted-foreground" />
+                                          </button>
+                                        )}
                                       </td>
                                     );
                                   }
@@ -314,7 +322,7 @@ export default function ExcelDropzone({
                                     <td
                                       key={ci}
                                       className={cn(
-                                        "p-2 align-middle border-r last:border-r-0 whitespace-nowrap",
+                                        "p-2 align-middle border-r last:border-r-0 whitespace-nowrap group relative",
                                         isColHeaderRow && "font-medium text-muted-foreground",
                                       )}
                                       style={{
@@ -322,7 +330,15 @@ export default function ExcelDropzone({
                                         overflow: "hidden",
                                       }}
                                     >
-                                      {cell}
+                                      <span className="truncate block">{cell}</span>
+                                      {onCellSearch && cell && (
+                                        <button
+                                          onClick={(e) => { e.stopPropagation(); onCellSearch(cell.trim()); }}
+                                          className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-muted-foreground/20"
+                                        >
+                                          <Search className="h-3 w-3 text-muted-foreground" />
+                                        </button>
+                                      )}
                                     </td>
                                   );
                                 })}

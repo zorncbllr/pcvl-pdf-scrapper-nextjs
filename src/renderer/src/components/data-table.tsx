@@ -42,7 +42,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import { cn } from "@/lib/utils";
+import { cn, wordsMatch } from "@/lib/utils";
 import {
   Pagination,
   PaginationContent,
@@ -109,9 +109,7 @@ const columns: ColumnDef<Voter>[] = [
       const gf = table.getState().globalFilter;
       const highlighted =
         gf &&
-        String(row.getValue("name") ?? "")
-          .toLowerCase()
-          .includes(String(gf).toLowerCase());
+        wordsMatch(String(row.getValue("name") ?? ""), String(gf));
 
       return (
         <Checkbox
@@ -463,9 +461,7 @@ export function DataTable({
     },
     globalFilterFn: (row, _columnId, filterValue) => {
       if (!filterValue) return true;
-      const search = String(filterValue).toLowerCase();
-      const value = String(row.getValue("name") ?? "").toLowerCase();
-      return value.includes(search);
+      return wordsMatch(String(row.getValue("name") ?? ""), String(filterValue));
     },
     state: {
       sorting,
@@ -565,9 +561,7 @@ export function DataTable({
                   globalFilter &&
                   rows.findIndex(
                     (r) =>
-                      String(r.getValue("name") ?? "")
-                        .toLowerCase()
-                        .includes(String(globalFilter).toLowerCase()),
+                      wordsMatch(String(r.getValue("name") ?? ""), String(globalFilter)),
                   ) === virtualRow.index;
                 return (
                   <div

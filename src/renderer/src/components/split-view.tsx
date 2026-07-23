@@ -10,7 +10,7 @@ import { DataTable } from "./data-table";
 import type { Voter } from "@/types/electron";
 import ExcelDropzone from "./excel-dropzone";
 import { SearchIcon, CheckCheck, Zap, Loader2, Eye, CircleMinus } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, wordsMatch } from "@/lib/utils";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
 import { toast } from "@/hooks/use-toast";
@@ -68,6 +68,7 @@ export default function SplitView({
   const [reviewOpen, setReviewOpen] = useState(false);
   const initialized = useRef(false);
   const pairMapRef = useRef<Map<number, number>>(new Map());
+  const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     window.electronAPI.getPairs().then((pairs) => {
@@ -131,15 +132,14 @@ export default function SplitView({
 
   const handleMark = useCallback(() => {
     if (!searchQuery || !preview) return;
-    const q = searchQuery.toLowerCase();
 
     const voterIdx = voters.findIndex(
-      (v) => v.name && v.name.toLowerCase().includes(q),
+      (v) => v.name && wordsMatch(v.name, searchQuery),
     );
     if (voterIdx === -1) return;
 
     const excelIdx = preview.rows.findIndex((row, i) =>
-      !preview.headerRows?.[i] && row.some((cell) => cell.toLowerCase().includes(q)),
+      !preview.headerRows?.[i] && row.some((cell) => wordsMatch(cell, searchQuery)),
     );
     if (excelIdx === -1) return;
 
@@ -326,7 +326,8 @@ export default function SplitView({
             <div className="relative w-full max-w-sm rounded-md border border-input bg-background ring-offset-background transition-colors focus-within:outline-none focus-within:ring-1 focus-within:ring-ring focus-within:ring-offset-0">
               <SearchIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none" />
               <Input
-                placeholder="Search"
+                  ref={searchRef}
+                  placeholder="Search"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full border-0 bg-transparent pl-8 ring-0 focus-visible:ring-0 focus-visible:ring-offset-0"
@@ -449,6 +450,7 @@ export default function SplitView({
                   searchQuery={searchQuery}
                   statusFilter={statusFilter}
                   selectedRowIds={selectedRowIds}
+                  onCellSearch={(value) => { setSearchQuery(value); searchRef.current?.focus(); }}
                 />
               </div>
               {preview && (
