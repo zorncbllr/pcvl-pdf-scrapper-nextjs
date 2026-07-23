@@ -32,6 +32,7 @@ interface ExcelDropzoneProps {
   statusFilter?: string;
   selectedRowIds?: number[];
   onCellSearch?: (value: string) => void;
+  onRowFocus?: (rowIndex: number) => void;
 }
 
 function isExcelFile(file: File): boolean {
@@ -50,10 +51,12 @@ export default function ExcelDropzone({
   statusFilter,
   selectedRowIds,
   onCellSearch,
+  onRowFocus,
 }: ExcelDropzoneProps) {
   const [file, setFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string>("");
+  const [focusedRowIdx, setFocusedRowIdx] = useState<number | null>(null);
   const dragCounter = useRef(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -244,20 +247,30 @@ export default function ExcelDropzone({
                       <tbody className="[&_tr:last-child]:border-0">
                         {(() => {
                           const consumed = new Set<string>();
+                          const activeFocusedRowIdx = focusedRowIdx !== null && filteredEntries.some(([ri]) => ri === focusedRowIdx)
+                            ? focusedRowIdx
+                            : filteredEntries[0][0];
                           return filteredEntries.map(([ri, row]) => {
                             const isColHeaderRow = ri === preview.headerRow - 1;
                             const rowHighlighted =
-                              q && filteredEntries.length > 0 && ri === filteredEntries[0][0];
+                              q && filteredEntries.length > 0 && ri === activeFocusedRowIdx;
                             const rowSelected = selectedSet.size > 0 && preview && selectedSet.has(preview.rowIds[ri]);
                             return (
                               <tr
                                 key={ri}
+                                onClick={() => {
+                                  if (q) {
+                                    setFocusedRowIdx(ri);
+                                    onRowFocus?.(ri);
+                                  }
+                                }}
                                 className={cn(
                                   "border-b transition-colors",
                                   isColHeaderRow && "bg-muted/50 font-semibold",
                                   rowHighlighted && "bg-primary text-primary-foreground",
                                   !rowHighlighted && rowSelected && "bg-muted",
                                   !rowHighlighted && !rowSelected && "hover:bg-muted/50",
+                                  q && "cursor-pointer",
                                 )}
                                 style={{ height: "36px" }}
                               >

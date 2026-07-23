@@ -323,6 +323,7 @@ export function DataTable({
   onSelectionChange,
   selectionSyncKey,
   onBarangayChange,
+  onRowFocus,
 }: {
   data: Voter[];
   showActions?: boolean;
@@ -334,8 +335,10 @@ export function DataTable({
   onSelectionChange?: (indices: number[]) => void;
   selectionSyncKey?: number;
   onBarangayChange?: (barangay: string | null) => void;
+  onRowFocus?: (voterId: number) => void;
 }) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
+  const [focusedMatchIndex, setFocusedMatchIndex] = React.useState<number | null>(null);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(() => {
     const filters: ColumnFiltersState = [];
     if (statusFilter && statusFilter !== "all") {
@@ -346,6 +349,7 @@ export function DataTable({
   const [globalFilter, setGlobalFilter] = React.useState(searchQuery ?? "");
   React.useEffect(() => {
     if (searchQuery !== undefined) setGlobalFilter(searchQuery);
+    setFocusedMatchIndex(null);
   }, [searchQuery]);
   React.useEffect(() => {
     setColumnFilters((prev) => {
@@ -565,21 +569,33 @@ export function DataTable({
             ) : (
               virtualRows.map((virtualRow) => {
                 const row = rows[virtualRow.index];
-                const rowHighlighted =
-                  globalFilter &&
-                  rows.findIndex(
-                    (r) =>
+                const matchIdx = globalFilter
+                  ? rows.findIndex((r) =>
                       wordsMatch(String(r.getValue("name") ?? ""), String(globalFilter)),
-                  ) === virtualRow.index;
+                    )
+                  : -1;
+                const isMatch = matchIdx === virtualRow.index;
+                const isHighlighted =
+                  globalFilter &&
+                  (focusedMatchIndex !== null
+                    ? focusedMatchIndex === virtualRow.index
+                    : isMatch);
                 return (
                   <div
                     key={row.id}
+                    onClick={() => {
+                      if (globalFilter) {
+                        setFocusedMatchIndex(virtualRow.index);
+                        onRowFocus?.(row.original.voterId);
+                      }
+                    }}
                     className={cn(
                       "flex border-b transition-colors",
-                      row.getIsSelected() && !rowHighlighted && "bg-muted",
-                      rowHighlighted
+                      row.getIsSelected() && !isHighlighted && "bg-muted",
+                      isHighlighted
                         ? "bg-primary text-primary-foreground"
                         : "hover:bg-muted/50",
+                      globalFilter && "cursor-pointer",
                     )}
                     style={{
                       position: "absolute",

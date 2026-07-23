@@ -67,8 +67,11 @@ export default function SplitView({
   const [selectionSyncKey, setSelectionSyncKey] = useState(0);
   const [autoMatching, setAutoMatching] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
+  const [focusedVoterId, setFocusedVoterId] = useState<number | null>(null);
+  const [focusedExcelRi, setFocusedExcelRi] = useState<number | null>(null);
   const initialized = useRef(false);
   const pairMapRef = useRef<Map<number, number>>(new Map());
+  const manuallyMarked = useRef<Set<number>>(new Set());
   const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -83,6 +86,7 @@ export default function SplitView({
 
   useEffect(() => {
     pairMapRef.current = new Map();
+    manuallyMarked.current = new Set();
     window.electronAPI.clearPairs();
   }, [preview]);
 
@@ -134,20 +138,23 @@ export default function SplitView({
   const handleMark = useCallback(() => {
     if (!searchQuery || !preview) return;
 
-    const voterIdx = voters.findIndex(
-      (v) => v.name && wordsMatch(v.name, searchQuery),
-    );
+    const voterIdx = focusedVoterId !== null
+      ? voters.findIndex((v) => v.voterId === focusedVoterId)
+      : voters.findIndex((v) => v.name && wordsMatch(v.name, searchQuery));
     if (voterIdx === -1) return;
 
-    const excelIdx = preview.rows.findIndex((row, i) =>
-      !preview.headerRows?.[i] && row.some((cell) => wordsMatch(cell, searchQuery)),
-    );
+    const excelIdx = focusedExcelRi !== null
+      ? (preview.headerRows?.[focusedExcelRi] ? -1 : focusedExcelRi)
+      : preview.rows.findIndex((row, i) =>
+          !preview.headerRows?.[i] && row.some((cell) => wordsMatch(cell, searchQuery)),
+        );
     if (excelIdx === -1) return;
 
     const voter = voters[voterIdx];
     const excelRowId = preview.rowIds[excelIdx];
 
     pairMapRef.current.set(voter.voterId, excelRowId);
+    manuallyMarked.current.add(voter.voterId);
     window.electronAPI.savePair({ voterId: voter.voterId, excelRowId });
 
     const newValue = !voter.isGiven;
@@ -165,7 +172,7 @@ export default function SplitView({
 
     setMarkKey((k) => k + 1);
     setSelectionSyncKey((k) => k + 1);
-  }, [searchQuery, voters, preview]);
+  }, [searchQuery, voters, preview, focusedVoterId, focusedExcelRi]);
 
   const norm = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
 
@@ -219,6 +226,7 @@ export default function SplitView({
       voterName: string;
       excelCell: string;
       exact: boolean;
+      manual: boolean;
       barangay: string;
       precinct: string;
       sheet: string;
@@ -238,6 +246,7 @@ export default function SplitView({
 
       let matchedCell = "";
       let exact = false;
+      let manual = manuallyMarked.current.has(voter.voterId);
       const vn = norm(voter.name);
       let bestCell = "";
       let bestDist = Infinity;
@@ -259,6 +268,7 @@ export default function SplitView({
         voterName: voter.name,
         excelCell: matchedCell || "",
         exact,
+        manual,
         barangay: voter.barangay,
         precinct: voter.precinct,
         sheet: activeSheet || "",
@@ -380,7 +390,7 @@ export default function SplitView({
                   ref={searchRef}
                   placeholder="Search"
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => { setSearchQuery(e.target.value); setFocusedVoterId(null); setFocusedExcelRi(null); }}
                 className="w-full border-0 bg-transparent pl-8 ring-0 focus-visible:ring-0 focus-visible:ring-offset-0"
               />
             </div>
@@ -455,6 +465,7 @@ export default function SplitView({
                     selectionSyncKey={selectionSyncKey}
                     onSelectionChange={handleSelectionChange}
                     onBarangayChange={setBarangayFilter}
+                    onRowFocus={setFocusedVoterId}
                   />
                 </div>
               )}
@@ -502,7 +513,8 @@ export default function SplitView({
                   searchQuery={searchQuery}
                   statusFilter={statusFilter}
                   selectedRowIds={selectedRowIds}
-                  onCellSearch={(value) => { setSearchQuery(value); searchRef.current?.focus(); }}
+                  onCellSearch={(value) => { setSearchQuery(value); setFocusedVoterId(null); setFocusedExcelRi(null); searchRef.current?.focus(); }}
+                  onRowFocus={setFocusedExcelRi}
                 />
               </div>
               {preview && (
@@ -553,8 +565,10 @@ export default function SplitView({
                       <td className="p-2 align-middle text-muted-foreground text-xs text-center">{i + 1}</td>
                       <td className="p-2 align-middle">{p.voterName}</td>
                       <td className="p-2 align-middle whitespace-nowrap">{p.excelCell}</td>
-                      <td className="p-2 align-middle">
-                        {p.exact ? (
+                      <td className="p-2 align-middle whitespace-nowrap">
+                        {p.manual ? (
+                          <span className="text-blue-600 dark:text-blue-400">Manual</span>
+                        ) : p.exact ? (
                           <span className="text-green-600 dark:text-green-400">Exact</span>
                         ) : (
                           <span className="text-amber-600 dark:text-amber-400">Fuzzy</span>
