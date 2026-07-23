@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import {
   Card,
   CardContent,
@@ -9,7 +9,7 @@ import {
 import { DataTable } from "./data-table";
 import type { Voter } from "@/types/electron";
 import ExcelDropzone from "./excel-dropzone";
-import { SearchIcon, CheckCheck, Zap, Loader2, Eye } from "lucide-react";
+import { SearchIcon, CheckCheck, Zap, Loader2, Eye, CircleMinus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
@@ -64,9 +64,6 @@ export default function SplitView({
   const [selectedRowIds, setSelectedRowIds] = useState<number[]>([]);
   const [selectionSyncKey, setSelectionSyncKey] = useState(0);
   const [autoMatching, setAutoMatching] = useState(false);
-  const [reviewPairs, setReviewPairs] = useState<
-    { voterName: string; excelCell: string; exact: boolean; barangay: string; precinct: string }[]
-  >([]);
   const [reviewOpen, setReviewOpen] = useState(false);
   const initialized = useRef(false);
   const pairMapRef = useRef<Map<number, number>>(new Map());
@@ -191,14 +188,18 @@ export default function SplitView({
     return prev[b.length];
   };
 
-  const handleReview = useCallback(() => {
-    if (!preview) return;
+  const reviewData = useMemo(() => {
+    if (!preview) return [];
     const pairs: {
+      voterId: number;
+      excelRowId: number;
       voterName: string;
       excelCell: string;
       exact: boolean;
       barangay: string;
       precinct: string;
+      sheet: string;
+      row: string[];
     }[] = [];
     const seenVoters = new Set<number>();
     for (const [voterId, excelRowId] of pairMapRef.current) {
@@ -206,7 +207,7 @@ export default function SplitView({
       seenVoters.add(voterId);
 
       const voter = voters.find((v) => v.voterId === voterId);
-      if (!voter) continue;
+      if (!voter || !voter.isGiven) continue;
 
       const ri = preview.rowIds.indexOf(excelRowId);
       if (ri === -1) continue;
@@ -223,17 +224,29 @@ export default function SplitView({
       }
 
       pairs.push({
+        voterId: voter.voterId,
+        excelRowId,
         voterName: voter.name,
         excelCell: matchedCell || row[0] || "",
         exact,
         barangay: voter.barangay,
         precinct: voter.precinct,
+        sheet: activeSheet || "",
+        row,
       });
     }
     pairs.sort((a, b) => a.voterName.localeCompare(b.voterName));
-    setReviewPairs(pairs);
-    setReviewOpen(true);
-  }, [voters, preview]);
+    return pairs;
+  }, [voters, preview, selectedRowIds, activeSheet]);
+
+  const handleRemovePair = useCallback((voterId: number, excelRowId: number) => {
+    const voter = voters.find((v) => v.voterId === voterId);
+    if (!voter) return;
+    voter.isGiven = false;
+    window.electronAPI.updateStatus({ voterId, value: false });
+    setSelectedRowIds((prev) => prev.filter((id) => id !== excelRowId));
+    setSelectionSyncKey((k) => k + 1);
+  }, [voters]);
 
   const handleAutoMatch = useCallback(async () => {
     if (!preview || voters.length === 0 || !activeSheet || autoMatching) return;
@@ -273,14 +286,11 @@ export default function SplitView({
         }
         if (!bestVoter) continue;
 
-        const alreadyPaired = pairMapRef.current.has(bestVoter.voterId);
         pairMapRef.current.set(bestVoter.voterId, excelRowId);
         bestVoter.isGiven = true;
-        if (!alreadyPaired) {
-          matchedVoterIds.push(bestVoter.voterId);
-          matchedRowIds.push(excelRowId);
-          window.electronAPI.savePair({ voterId: bestVoter.voterId, excelRowId });
-        }
+        matchedVoterIds.push(bestVoter.voterId);
+        matchedRowIds.push(excelRowId);
+        window.electronAPI.savePair({ voterId: bestVoter.voterId, excelRowId });
       }
 
       if (matchedVoterIds.length === 0) {
@@ -345,11 +355,15 @@ export default function SplitView({
               variant="outline"
               size="icon"
               className="shrink-0"
-              onClick={handleReview}
-              disabled={pairMapRef.current.size === 0}
+              onClick={() => setReviewOpen(true)}
             >
               <Eye className="h-4 w-4" />
             </Button>
+            {reviewData.length > 0 && (
+              <span className="text-sm text-muted-foreground whitespace-nowrap">
+                {reviewData.length} matched
+              </span>
+            )}
             <Select
               value={statusFilter}
               onValueChange={(value) => setStatusFilter(value)}
@@ -376,21 +390,28 @@ export default function SplitView({
             </CardDescription>
           </CardHeader>
           <CardContent className="flex-1 min-h-0">
-            {loading ? (
-              <div className="flex justify-center py-8 text-muted-foreground">
-                Loading voters...
-              </div>
-            ) : (
-              <DataTable
-                data={voters}
-                simple
-                searchQuery={searchQuery}
-                statusFilter={statusFilter}
-                toggleHighlightedRow={markKey}
-                selectionSyncKey={selectionSyncKey}
-                onSelectionChange={handleSelectionChange}
-              />
-            )}
+            <div className="h-full flex flex-col">
+              {loading ? (
+                <div className="flex justify-center py-8 text-muted-foreground">
+                  Loading voters...
+                </div>
+              ) : (
+                <div className="flex-1 min-h-0">
+                  <DataTable
+                    data={voters}
+                    simple
+                    searchQuery={searchQuery}
+                    statusFilter={statusFilter}
+                    toggleHighlightedRow={markKey}
+                    selectionSyncKey={selectionSyncKey}
+                    onSelectionChange={handleSelectionChange}
+                  />
+                </div>
+              )}
+              <p className="text-sm text-muted-foreground mt-4 flex-none">
+                {voters.filter((v) => v.isGiven).length} of {voters.length} row(s) selected.
+              </p>
+            </div>
           </CardContent>
         </Card>
         <Card className="w-1/2 flex flex-col min-h-0">
@@ -418,47 +439,59 @@ export default function SplitView({
             )}
           </CardHeader>
           <CardContent className="flex-1 min-h-0 p-6 pt-0">
-            <ExcelDropzone
-              key={resetKey}
-              onFileSelect={onFileSelect}
-              sheets={sheets}
-              activeSheet={activeSheet}
-              preview={preview}
-              onSheetClick={onSheetClick}
-              loadingSheet={loadingSheet}
-              searchQuery={searchQuery}
-              statusFilter={statusFilter}
-              selectedRowIds={selectedRowIds}
-            />
+            <div className="h-full flex flex-col">
+              <div className="flex-1 min-h-0">
+                <ExcelDropzone
+                  key={resetKey}
+                  onFileSelect={onFileSelect}
+                  sheets={sheets}
+                  activeSheet={activeSheet}
+                  preview={preview}
+                  onSheetClick={onSheetClick}
+                  loadingSheet={loadingSheet}
+                  searchQuery={searchQuery}
+                  statusFilter={statusFilter}
+                  selectedRowIds={selectedRowIds}
+                />
+              </div>
+              {preview && (
+                <p className="text-sm text-muted-foreground mt-4 flex-none">
+                  {selectedRowIds.length} of {preview.rows.length} row(s) selected.
+                </p>
+              )}
+            </div>
           </CardContent>
         </Card>
       </div>
 
       <Dialog open={reviewOpen} onOpenChange={setReviewOpen}>
-        <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col">
+        <DialogContent className="max-w-5xl max-h-[80vh] flex flex-col">
           <DialogHeader>
-            <DialogTitle>Review Matched Pairs</DialogTitle>
+            <DialogTitle>Review Matched Pairs ({reviewData.length})</DialogTitle>
           </DialogHeader>
           <div className="overflow-auto flex-1 min-h-0">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b text-left">
+                  <th className="w-10 h-10 px-2 font-medium text-muted-foreground">#</th>
                   <th className="h-10 px-2 font-medium text-muted-foreground">Voter Name</th>
-                  <th className="h-10 px-2 font-medium text-muted-foreground">Excel Cell</th>
+                  <th className="h-10 px-2 font-medium text-muted-foreground">Excel Row</th>
                   <th className="h-10 px-2 font-medium text-muted-foreground">Match</th>
+                  <th className="h-10 px-2 font-medium text-muted-foreground">Sheet</th>
                   <th className="h-10 px-2 font-medium text-muted-foreground">Barangay</th>
                   <th className="h-10 px-2 font-medium text-muted-foreground">Precinct</th>
+                  <th className="w-8 h-10 px-2 font-medium text-muted-foreground"></th>
                 </tr>
               </thead>
               <tbody>
-                {reviewPairs.length === 0 ? (
+                {reviewData.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="h-24 text-center text-muted-foreground">
+                    <td colSpan={8} className="h-24 text-center text-muted-foreground">
                       No pairs to review.
                     </td>
                   </tr>
                 ) : (
-                  reviewPairs.map((p, i) => (
+                  reviewData.map((p, i) => (
                     <tr
                       key={i}
                       className={cn(
@@ -466,8 +499,9 @@ export default function SplitView({
                         !p.exact && "bg-yellow-50 dark:bg-yellow-950/20",
                       )}
                     >
+                      <td className="p-2 align-middle text-muted-foreground text-xs text-center">{i + 1}</td>
                       <td className="p-2 align-middle">{p.voterName}</td>
-                      <td className="p-2 align-middle">{p.excelCell}</td>
+                      <td className="p-2 align-middle whitespace-nowrap">{p.excelCell}</td>
                       <td className="p-2 align-middle">
                         {p.exact ? (
                           <span className="text-green-600 dark:text-green-400">Exact</span>
@@ -475,8 +509,17 @@ export default function SplitView({
                           <span className="text-amber-600 dark:text-amber-400">Fuzzy</span>
                         )}
                       </td>
+                      <td className="p-2 align-middle">{p.sheet}</td>
                       <td className="p-2 align-middle">{p.barangay}</td>
                       <td className="p-2 align-middle">{p.precinct}</td>
+                      <td className="p-2 align-middle">
+                        <button
+                          onClick={() => handleRemovePair(p.voterId, p.excelRowId)}
+                          className="text-muted-foreground hover:text-destructive leading-none p-0 border-0 bg-transparent cursor-pointer inline-flex items-center justify-center"
+                        >
+                          <CircleMinus className="h-4 w-4" />
+                        </button>
+                      </td>
                     </tr>
                   ))
                 )}

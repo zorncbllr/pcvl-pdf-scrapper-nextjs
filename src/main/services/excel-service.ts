@@ -89,8 +89,33 @@ export async function readSheetData(
   }
   if (colCount < 1) return { headers: [], rows: [], rowIds: [], merges };
 
+  const hasNameLabel = (cell: any): boolean => {
+    if (!cell?.type) return false;
+    try {
+      const text = cell.text?.toString() ?? "";
+      return /(?:^|[^a-z])name(?:$|[^a-z])/i.test(text);
+    } catch {
+      return false;
+    }
+  };
+
+  let headerRow = 1;
+  let dataStartRow = 2;
+  for (let r = 1; r <= limit; r++) {
+    const row = ws.getRow(r);
+    let found = false;
+    row.eachCell((cell) => {
+      if (hasNameLabel(cell)) found = true;
+    });
+    if (found) {
+      headerRow = r;
+      dataStartRow = r + 1;
+      break;
+    }
+  }
+
   const headers: string[] = new Array(colCount).fill("");
-  ws.getRow(1).eachCell((cell, colNumber) => {
+  ws.getRow(headerRow).eachCell((cell, colNumber) => {
     if (cell.type) {
       try {
         headers[colNumber - 1] = cell.text?.toString() ?? "";
@@ -102,23 +127,31 @@ export async function readSheetData(
 
   const rows: string[][] = [];
   const rowIds: number[] = [];
-  for (let r = 2; r <= limit; r++) {
+  for (let r = dataStartRow; r <= limit; r++) {
     const row = ws.getRow(r);
     const values: string[] = new Array(colCount).fill("");
+    let hasName = false;
     row.eachCell((cell, colNumber) => {
       if (cell.type) {
         try {
-          values[colNumber - 1] = cell.text?.toString() ?? "";
+          const text = cell.text?.toString() ?? "";
+          if (hasNameLabel(cell)) hasName = true;
+          values[colNumber - 1] = text;
         } catch {
           values[colNumber - 1] = "";
         }
       }
     });
+    if (hasName) continue;
     rows.push(values);
     rowIds.push(nextRowId++);
   }
 
-  return { headers, rows, rowIds, merges };
+  const mergedNorm = merges
+    .filter((m) => m.row >= headerRow)
+    .map((m) => ({ ...m, row: m.row - headerRow + 1 }));
+
+  return { headers, rows, rowIds, merges: mergedNorm };
 }
 
 interface VoterRow {
