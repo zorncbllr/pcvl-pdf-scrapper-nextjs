@@ -9,7 +9,7 @@ import {
 import { DataTable } from "./data-table";
 import type { Voter } from "@/types/electron";
 import ExcelDropzone from "./excel-dropzone";
-import { SearchIcon, CheckCheck, Zap } from "lucide-react";
+import { SearchIcon, CheckCheck, Zap, Loader2 } from "lucide-react";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
 import { toast } from "@/hooks/use-toast";
@@ -56,6 +56,7 @@ export default function SplitView({
   const [markKey, setMarkKey] = useState(0);
   const [selectedRowIds, setSelectedRowIds] = useState<number[]>([]);
   const [selectionSyncKey, setSelectionSyncKey] = useState(0);
+  const [autoMatching, setAutoMatching] = useState(false);
   const initialized = useRef(false);
   const pairMapRef = useRef<Map<number, number>>(new Map());
 
@@ -100,9 +101,18 @@ export default function SplitView({
         const voter = voters[vi];
         if (!voter) continue;
         const rowId = map.get(voter.voterId);
-        if (rowId !== undefined && !seen.has(rowId)) {
+        if (rowId !== undefined) {
           seen.add(rowId);
           result.push(rowId);
+        }
+      }
+      for (const voter of voters) {
+        if (voter.isGiven) {
+          const rowId = map.get(voter.voterId);
+          if (rowId !== undefined && !seen.has(rowId)) {
+            seen.add(rowId);
+            result.push(rowId);
+          }
         }
       }
       setSelectedRowIds(result);
@@ -148,52 +158,58 @@ export default function SplitView({
   }, [searchQuery, voters, preview]);
 
   const handleAutoMatch = useCallback(async () => {
-    if (!preview || voters.length === 0 || !activeSheet) return;
-    const matchedVoterIds: number[] = [];
-    const matchedRowIds: number[] = [];
+    if (!preview || voters.length === 0 || !activeSheet || autoMatching) return;
+    setAutoMatching(true);
+    await new Promise((r) => setTimeout(r, 50));
+    try {
+      const matchedVoterIds: number[] = [];
+      const matchedRowIds: number[] = [];
 
-    const norm = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
+      const norm = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
 
-    for (const [ri, row] of preview.rows.entries()) {
-      const excelRowId = preview.rowIds[ri];
+      for (const [ri, row] of preview.rows.entries()) {
+        const excelRowId = preview.rowIds[ri];
 
-      let bestVoter: (typeof voters)[0] | null = null;
-      for (const cell of row) {
-        if (!cell) continue;
-        const cellValue = norm(cell);
-        const vi = voters.findIndex(
-          (v) => v.name && norm(v.name) === cellValue,
-        );
-        if (vi !== -1) {
-          bestVoter = voters[vi];
-          break;
+        let bestVoter: (typeof voters)[0] | null = null;
+        for (const cell of row) {
+          if (!cell) continue;
+          const cellValue = norm(cell);
+          const vi = voters.findIndex(
+            (v) => v.name && norm(v.name) === cellValue,
+          );
+          if (vi !== -1) {
+            bestVoter = voters[vi];
+            break;
+          }
         }
+        if (!bestVoter) continue;
+
+        pairMapRef.current.set(bestVoter.voterId, excelRowId);
+        bestVoter.isGiven = true;
+        matchedVoterIds.push(bestVoter.voterId);
+        matchedRowIds.push(excelRowId);
+        window.electronAPI.savePair({ voterId: bestVoter.voterId, excelRowId });
       }
-      if (!bestVoter) continue;
 
-      pairMapRef.current.set(bestVoter.voterId, excelRowId);
-      bestVoter.isGiven = true;
-      matchedVoterIds.push(bestVoter.voterId);
-      matchedRowIds.push(excelRowId);
-      window.electronAPI.savePair({ voterId: bestVoter.voterId, excelRowId });
+      if (matchedVoterIds.length === 0) {
+        toast({ title: "No exact name matches found." });
+        return;
+      }
+
+      await window.electronAPI.updateAllStatus({
+        voterIds: matchedVoterIds,
+        value: true,
+      });
+
+      const merged = new Set([...selectedRowIds, ...matchedRowIds]);
+      setSelectedRowIds(Array.from(merged));
+      setSelectionSyncKey((k) => k + 1);
+
+      toast({ title: `Auto-matched ${matchedVoterIds.length} voter(s).` });
+    } finally {
+      setAutoMatching(false);
     }
-
-    if (matchedVoterIds.length === 0) {
-      toast({ title: "No exact name matches found." });
-      return;
-    }
-
-    await window.electronAPI.updateAllStatus({
-      voterIds: matchedVoterIds,
-      value: true,
-    });
-
-    const merged = new Set([...selectedRowIds, ...matchedRowIds]);
-    setSelectedRowIds(Array.from(merged));
-    setSelectionSyncKey((k) => k + 1);
-
-    toast({ title: `Auto-matched ${matchedVoterIds.length} voter(s).` });
-  }, [voters, preview, activeSheet, selectedRowIds]);
+  }, [voters, preview, activeSheet, selectedRowIds, autoMatching]);
 
   return (
     <div className="space-y-4">
@@ -225,9 +241,13 @@ export default function SplitView({
               size="icon"
               className="shrink-0"
               onClick={handleAutoMatch}
-              disabled={!preview || !activeSheet}
+              disabled={!preview || !activeSheet || autoMatching}
             >
-              <Zap className="h-4 w-4" />
+              {autoMatching ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Zap className="h-4 w-4" />
+              )}
             </Button>
             <Select
               value={statusFilter}
