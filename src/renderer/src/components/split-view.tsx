@@ -9,9 +9,10 @@ import {
 import { DataTable } from "./data-table";
 import type { Voter } from "@/types/electron";
 import ExcelDropzone from "./excel-dropzone";
-import { SearchIcon, CheckCheck } from "lucide-react";
+import { SearchIcon, CheckCheck, Zap } from "lucide-react";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
+import { toast } from "@/hooks/use-toast";
 import {
   Select,
   SelectContent,
@@ -146,6 +147,54 @@ export default function SplitView({
     setSelectionSyncKey((k) => k + 1);
   }, [searchQuery, voters, preview]);
 
+  const handleAutoMatch = useCallback(async () => {
+    if (!preview || voters.length === 0 || !activeSheet) return;
+    const matchedVoterIds: number[] = [];
+    const matchedRowIds: number[] = [];
+
+    const norm = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
+
+    for (const [ri, row] of preview.rows.entries()) {
+      const excelRowId = preview.rowIds[ri];
+
+      let bestVoter: (typeof voters)[0] | null = null;
+      for (const cell of row) {
+        if (!cell) continue;
+        const cellValue = norm(cell);
+        const vi = voters.findIndex(
+          (v) => v.name && norm(v.name) === cellValue,
+        );
+        if (vi !== -1) {
+          bestVoter = voters[vi];
+          break;
+        }
+      }
+      if (!bestVoter) continue;
+
+      pairMapRef.current.set(bestVoter.voterId, excelRowId);
+      bestVoter.isGiven = true;
+      matchedVoterIds.push(bestVoter.voterId);
+      matchedRowIds.push(excelRowId);
+      window.electronAPI.savePair({ voterId: bestVoter.voterId, excelRowId });
+    }
+
+    if (matchedVoterIds.length === 0) {
+      toast({ title: "No exact name matches found." });
+      return;
+    }
+
+    await window.electronAPI.updateAllStatus({
+      voterIds: matchedVoterIds,
+      value: true,
+    });
+
+    const merged = new Set([...selectedRowIds, ...matchedRowIds]);
+    setSelectedRowIds(Array.from(merged));
+    setSelectionSyncKey((k) => k + 1);
+
+    toast({ title: `Auto-matched ${matchedVoterIds.length} voter(s).` });
+  }, [voters, preview, activeSheet, selectedRowIds]);
+
   return (
     <div className="space-y-4">
       <Card>
@@ -170,6 +219,15 @@ export default function SplitView({
               onClick={handleMark}
             >
               <CheckCheck className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              className="shrink-0"
+              onClick={handleAutoMatch}
+              disabled={!preview || !activeSheet}
+            >
+              <Zap className="h-4 w-4" />
             </Button>
             <Select
               value={statusFilter}
