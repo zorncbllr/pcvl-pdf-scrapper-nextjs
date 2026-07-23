@@ -18,6 +18,7 @@ interface SheetPreview {
   rows: string[][];
   rowIds: number[];
   merges: { row: number; col: number; rowspan: number; colspan: number }[];
+  headerRows: boolean[];
 }
 
 interface ExcelDropzoneProps {
@@ -239,46 +240,12 @@ export default function ExcelDropzone({
                       className="w-full text-sm"
                       style={{ tableLayout: "fixed" }}
                     >
-                      <thead>
-                        <tr className="border-b">
-                          <th className="w-8 h-10 px-2 text-left align-middle font-medium text-muted-foreground border-r">
-                          </th>
-                          {(() => {
-                            const consumed = new Set<number>();
-                            return preview.headers.map((h, ci) => {
-                              if (consumed.has(ci)) return null;
-                              const merge = preview.merges.find(
-                                (m) => m.row === 1 && m.col === ci + 1,
-                              );
-                              if (merge) {
-                                for (let c = ci + 1; c < ci + merge.colspan; c++)
-                                  consumed.add(c);
-                                return (
-                                  <th
-                                    key={ci}
-                                    colSpan={merge.colspan}
-                                    className="h-10 px-2 text-left align-middle font-medium text-muted-foreground whitespace-nowrap border-r last:border-r-0"
-                                  >
-                                    {h}
-                                  </th>
-                                );
-                              }
-                              return (
-                                <th
-                                  key={ci}
-                                  className="h-10 px-2 text-left align-middle font-medium text-muted-foreground whitespace-nowrap border-r last:border-r-0"
-                                >
-                                  {h}
-                                </th>
-                              );
-                            });
-                          })()}
-                        </tr>
-                      </thead>
+
                       <tbody className="[&_tr:last-child]:border-0">
                         {(() => {
                           const consumed = new Set<string>();
                           return filteredEntries.map(([ri, row]) => {
+                            const isColHeaderRow = ri === preview.headerRow - 1;
                             const rowHighlighted =
                               q && filteredEntries.length > 0 && ri === filteredEntries[0][0];
                             const rowSelected = selectedSet.size > 0 && preview && selectedSet.has(preview.rowIds[ri]);
@@ -287,6 +254,7 @@ export default function ExcelDropzone({
                                 key={ri}
                                 className={cn(
                                   "border-b transition-colors",
+                                  isColHeaderRow && "bg-muted/50 font-semibold",
                                   rowHighlighted && "bg-primary text-primary-foreground",
                                   !rowHighlighted && rowSelected && "bg-muted",
                                   !rowHighlighted && !rowSelected && "hover:bg-muted/50",
@@ -302,7 +270,7 @@ export default function ExcelDropzone({
                                   )}
                                   style={{ height: "36px" }}
                                 >
-                                  {rowSelected && (
+                                  {!preview.headerRows?.[ri] && rowSelected && (
                                     <Check className="h-4 w-4 mx-auto" />
                                   )}
                                 </td>
@@ -310,7 +278,7 @@ export default function ExcelDropzone({
                                   const key = `${ri}-${ci}`;
                                   if (consumed.has(key)) return null;
                                   const merge = preview.merges.find(
-                                    (m) => m.row === ri + 2 && m.col === ci + 1,
+                                    (m) => m.row === ri + (preview.headerRow ? 1 : 2) && m.col === ci + 1,
                                   );
                                   if (merge) {
                                     for (
@@ -333,7 +301,10 @@ export default function ExcelDropzone({
                                         key={ci}
                                         colSpan={merge.colspan}
                                         rowSpan={merge.rowspan}
-                                        className="p-2 align-middle border-r last:border-r-0 whitespace-nowrap"
+                                        className={cn(
+                                          "p-2 align-middle border-r last:border-r-0 whitespace-nowrap",
+                                          isColHeaderRow && "font-medium text-muted-foreground",
+                                        )}
                                       >
                                         {cell}
                                       </td>
@@ -342,7 +313,10 @@ export default function ExcelDropzone({
                                   return (
                                     <td
                                       key={ci}
-                                      className="p-2 align-middle border-r last:border-r-0 whitespace-nowrap"
+                                      className={cn(
+                                        "p-2 align-middle border-r last:border-r-0 whitespace-nowrap",
+                                        isColHeaderRow && "font-medium text-muted-foreground",
+                                      )}
                                       style={{
                                         height: "36px",
                                         overflow: "hidden",

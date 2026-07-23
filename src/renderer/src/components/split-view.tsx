@@ -33,6 +33,7 @@ interface SheetPreview {
   rows: string[][];
   rowIds: number[];
   merges: { row: number; col: number; rowspan: number; colspan: number }[];
+  headerRows: boolean[];
 }
 
 export default function SplitView({
@@ -137,8 +138,8 @@ export default function SplitView({
     );
     if (voterIdx === -1) return;
 
-    const excelIdx = preview.rows.findIndex((row) =>
-      row.some((cell) => cell.toLowerCase().includes(q)),
+    const excelIdx = preview.rows.findIndex((row, i) =>
+      !preview.headerRows?.[i] && row.some((cell) => cell.toLowerCase().includes(q)),
     );
     if (excelIdx === -1) return;
 
@@ -259,8 +260,9 @@ export default function SplitView({
       const voterNames = voters.map((v) => (v.name ? norm(v.name) : ""));
 
       for (const [ri, row] of preview.rows.entries()) {
+        if (preview.headerRows?.[ri]) continue;
         const excelRowId = preview.rowIds[ri];
-
+        
         let bestVoter: (typeof voters)[0] | null = null;
         let bestDist = 0;
         for (const cell of row) {
@@ -359,11 +361,6 @@ export default function SplitView({
             >
               <Eye className="h-4 w-4" />
             </Button>
-            {reviewData.length > 0 && (
-              <span className="text-sm text-muted-foreground whitespace-nowrap">
-                {reviewData.length} matched
-              </span>
-            )}
             <Select
               value={statusFilter}
               onValueChange={(value) => setStatusFilter(value)}
@@ -456,7 +453,7 @@ export default function SplitView({
               </div>
               {preview && (
                 <p className="text-sm text-muted-foreground mt-4 flex-none">
-                  {selectedRowIds.length} of {preview.rows.length} row(s) selected.
+                  {selectedRowIds.length} of {preview.rows.filter((_, i) => !preview.headerRows?.[i]).length} row(s) selected.
                 </p>
               )}
             </div>

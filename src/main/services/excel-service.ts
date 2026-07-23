@@ -67,7 +67,7 @@ export async function readExcelFile(data: Buffer): Promise<{ sheets: string[] }>
 export async function readSheetData(
   data: Buffer,
   sheetName: string,
-): Promise<{ headers: string[]; rows: string[][]; rowIds: number[]; merges: MergeRange[] }> {
+): Promise<{ headers: string[]; rows: string[][]; rowIds: number[]; merges: MergeRange[]; headerRows: boolean[] }> {
   const wb = new Workbook();
   await wb.xlsx.load(data);
 
@@ -127,31 +127,28 @@ export async function readSheetData(
 
   const rows: string[][] = [];
   const rowIds: number[] = [];
-  for (let r = dataStartRow; r <= limit; r++) {
+  const headerRows: boolean[] = [];
+  for (let r = 1; r <= limit; r++) {
     const row = ws.getRow(r);
     const values: string[] = new Array(colCount).fill("");
-    let hasName = false;
+    let isHeader = r < dataStartRow;
     row.eachCell((cell, colNumber) => {
       if (cell.type) {
         try {
           const text = cell.text?.toString() ?? "";
-          if (hasNameLabel(cell)) hasName = true;
+          if (hasNameLabel(cell)) isHeader = true;
           values[colNumber - 1] = text;
         } catch {
           values[colNumber - 1] = "";
         }
       }
     });
-    if (hasName) continue;
     rows.push(values);
     rowIds.push(nextRowId++);
+    headerRows.push(isHeader);
   }
 
-  const mergedNorm = merges
-    .filter((m) => m.row >= headerRow)
-    .map((m) => ({ ...m, row: m.row - headerRow + 1 }));
-
-  return { headers, rows, rowIds, merges: mergedNorm };
+  return { headers, rows, rowIds, merges, headerRows, headerRow };
 }
 
 interface VoterRow {
