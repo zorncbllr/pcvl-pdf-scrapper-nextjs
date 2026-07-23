@@ -19,6 +19,7 @@ interface SheetPreview {
   rowIds: number[];
   merges: { row: number; col: number; rowspan: number; colspan: number }[];
   headerRows: boolean[];
+  headerRow: number;
 }
 
 interface ExcelDropzoneProps {
@@ -33,6 +34,7 @@ interface ExcelDropzoneProps {
   selectedRowIds?: number[];
   onCellSearch?: (value: string) => void;
   onRowFocus?: (rowIndex: number) => void;
+  scrollRef?: React.RefObject<HTMLDivElement | null>;
 }
 
 function isExcelFile(file: File): boolean {
@@ -52,6 +54,7 @@ export default function ExcelDropzone({
   selectedRowIds,
   onCellSearch,
   onRowFocus,
+  scrollRef,
 }: ExcelDropzoneProps) {
   const [file, setFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -216,7 +219,7 @@ export default function ExcelDropzone({
             )}
 
             {preview && (
-              <div className="overflow-auto border rounded-md flex-1 min-h-0">
+              <div ref={scrollRef} className="overflow-auto border rounded-md flex-1 min-h-0">
                 {(() => {
                   const q = (searchQuery ?? "").toLowerCase();
                   const selectedSet = new Set(
@@ -231,6 +234,12 @@ export default function ExcelDropzone({
                       (statusFilter === "selected" && selectedSet.has(preview.rowIds[ri])) ||
                       (statusFilter === "unselected" && !selectedSet.has(preview.rowIds[ri])),
                     );
+                  if (statusFilter === "selected" && selectedRowIds && selectedRowIds.length > 0) {
+                    const orderMap = new Map(selectedRowIds.map((id, i) => [id, i]));
+                    filteredEntries.sort(
+                      (a, b) => (orderMap.get(preview.rowIds[a[0]]) ?? Infinity) - (orderMap.get(preview.rowIds[b[0]]) ?? Infinity),
+                    );
+                  }
                   if (filteredEntries.length === 0) {
                     return (
                       <div className="h-24 flex items-center justify-center text-muted-foreground text-sm">
@@ -244,6 +253,16 @@ export default function ExcelDropzone({
                       style={{ tableLayout: "fixed" }}
                     >
 
+                      {statusFilter === "selected" && (
+                        <thead>
+                          <tr className="h-10 bg-background sticky top-0 z-10 border-b">
+                            <td className="p-2 border-r w-8" />
+                            {preview.headers.map((_, ci) => (
+                              <td key={ci} className="p-2 border-r last:border-r-0" />
+                            ))}
+                          </tr>
+                        </thead>
+                      )}
                       <tbody className="[&_tr:last-child]:border-0">
                         {(() => {
                           const consumed = new Set<string>();

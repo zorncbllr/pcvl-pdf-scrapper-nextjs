@@ -23,6 +23,8 @@ export default function App() {
     rows: string[][];
     rowIds: number[];
     merges: { row: number; col: number; rowspan: number; colspan: number }[];
+    headerRows: boolean[];
+    headerRow: number;
   } | null>(null);
   const [loadingSheet, setLoadingSheet] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);

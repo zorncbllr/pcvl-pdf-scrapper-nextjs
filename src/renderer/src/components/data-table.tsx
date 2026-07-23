@@ -324,6 +324,7 @@ export function DataTable({
   selectionSyncKey,
   onBarangayChange,
   onRowFocus,
+  scrollRef,
 }: {
   data: Voter[];
   showActions?: boolean;
@@ -336,6 +337,7 @@ export function DataTable({
   selectionSyncKey?: number;
   onBarangayChange?: (barangay: string | null) => void;
   onRowFocus?: (voterId: number) => void;
+  scrollRef?: React.RefObject<HTMLDivElement | null>;
 }) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [focusedMatchIndex, setFocusedMatchIndex] = React.useState<number | null>(null);
@@ -542,7 +544,7 @@ export function DataTable({
     const headerGroup = table.getHeaderGroups()[0];
     return (
       <div className="w-full h-full text-sm">
-        <div ref={parentRef} className="rounded-md border h-full overflow-auto">
+        <div ref={(el) => { parentRef.current = el; if (scrollRef) (scrollRef as React.MutableRefObject<HTMLDivElement | null>).current = el; }} className="rounded-md border h-full overflow-auto">
           <div className="sticky top-0 z-10 bg-background flex border-b min-w-0">
             {headerGroup.headers.map((header) => (
               <div

@@ -34,6 +34,7 @@ interface SheetPreview {
   rowIds: number[];
   merges: { row: number; col: number; rowspan: number; colspan: number }[];
   headerRows: boolean[];
+  headerRow: number;
 }
 
 export default function SplitView({
@@ -73,6 +74,8 @@ export default function SplitView({
   const pairMapRef = useRef<Map<number, number>>(new Map());
   const manuallyMarked = useRef<Set<number>>(new Set());
   const searchRef = useRef<HTMLInputElement>(null);
+  const leftScrollRef = useRef<HTMLDivElement>(null);
+  const rightScrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     window.electronAPI.getPairs().then((pairs) => {
@@ -81,8 +84,12 @@ export default function SplitView({
         map.set(p.voterId, p.excelRowId);
       }
       pairMapRef.current = map;
+      const ids = voters
+        .filter((v) => v.isGiven && map.has(v.voterId))
+        .map((v) => map.get(v.voterId)!);
+      if (ids.length > 0) setSelectedRowIds(ids);
     });
-  }, []);
+  }, [voters]);
 
   useEffect(() => {
     pairMapRef.current = new Map();
@@ -102,6 +109,44 @@ export default function SplitView({
     }, [] as number[]);
     setSelectedRowIds(ids);
   }, [voters]);
+
+  useEffect(() => {
+    const left = leftScrollRef.current;
+    const right = rightScrollRef.current;
+    if (!left || !right) return;
+    let syncing = false;
+    const sync = (source: HTMLDivElement, target: HTMLDivElement) => {
+      if (syncing || statusFilter !== "selected") return;
+      syncing = true;
+      const pct = source.scrollTop / (source.scrollHeight - source.clientHeight);
+      target.scrollTop = pct * (target.scrollHeight - target.clientHeight);
+      requestAnimationFrame(() => { syncing = false; });
+    };
+    const onLeftScroll = () => sync(left, right);
+    const onRightScroll = () => sync(right, left);
+    left.addEventListener("scroll", onLeftScroll);
+    right.addEventListener("scroll", onRightScroll);
+    return () => {
+      left.removeEventListener("scroll", onLeftScroll);
+      right.removeEventListener("scroll", onRightScroll);
+    };
+  }, [statusFilter]);
+
+  const displayVoters = useMemo(() => {
+    if (statusFilter !== "selected" || !preview) return voters;
+    const paired = voters.filter((v) => v.isGiven && pairMapRef.current.has(v.voterId));
+    paired.sort((a, b) => a.name.localeCompare(b.name));
+    return paired;
+  }, [voters, statusFilter, preview, selectionSyncKey]);
+
+  const displaySelectedRowIds = useMemo(() => {
+    if (statusFilter !== "selected" || !preview) return selectedRowIds;
+    const pairedVoters = voters.filter((v) => v.isGiven && pairMapRef.current.has(v.voterId));
+    pairedVoters.sort((a, b) => a.name.localeCompare(b.name));
+    return pairedVoters
+      .map((v) => pairMapRef.current.get(v.voterId)!)
+      .filter((id): id is number => id !== undefined);
+  }, [voters, statusFilter, preview, selectionSyncKey]);
 
   const handleSelectionChange = useCallback(
     (voterIndices: number[]): void => {
@@ -457,7 +502,8 @@ export default function SplitView({
               ) : (
                 <div className="flex-1 min-h-0">
                   <DataTable
-                    data={voters}
+                    key={statusFilter === "selected" ? `selected` : `all`}
+                    data={displayVoters}
                     simple
                     searchQuery={searchQuery}
                     statusFilter={statusFilter}
@@ -466,6 +512,7 @@ export default function SplitView({
                     onSelectionChange={handleSelectionChange}
                     onBarangayChange={setBarangayFilter}
                     onRowFocus={setFocusedVoterId}
+                    scrollRef={leftScrollRef}
                   />
                 </div>
               )}
@@ -512,9 +559,10 @@ export default function SplitView({
                   loadingSheet={loadingSheet}
                   searchQuery={searchQuery}
                   statusFilter={statusFilter}
-                  selectedRowIds={selectedRowIds}
+                  selectedRowIds={displaySelectedRowIds}
                   onCellSearch={(value) => { setSearchQuery(value); setFocusedVoterId(null); setFocusedExcelRi(null); searchRef.current?.focus(); }}
                   onRowFocus={setFocusedExcelRi}
+                  scrollRef={rightScrollRef}
                 />
               </div>
               {preview && (

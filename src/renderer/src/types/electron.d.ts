@@ -47,6 +47,8 @@ export interface ElectronAPI {
     rows: string[][];
     rowIds: number[];
     merges: { row: number; col: number; rowspan: number; colspan: number }[];
+    headerRows: boolean[];
+    headerRow: number;
   }>;
   openPath: (filePath: string) => Promise<{ success: boolean; msg: string }>;
   getPairs: () => Promise<{ voterId: number; excelRowId: number }[]>;
