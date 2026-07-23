@@ -1,6 +1,6 @@
 {
   "name": "voter-management-system",
-  "version": "1.2.0",
+  "version": "2.0.0",
   "private": true,
   "description": "Voter Management App for importing PCVL PDF files and managing voter records",
   "author": "Manuel",
@@ -60,7 +60,7 @@
   },
   "build": {
     "appId": "com.voter-management.app",
-    "productName": "Voter Management App",
+    "productName": "Voter Management System",
     "directories": {
       "output": "dist"
     },
