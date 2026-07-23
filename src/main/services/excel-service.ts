@@ -180,12 +180,12 @@ export async function exportExcel(savePath: string, onlySelected = false) {
     const workBook = new Workbook();
     const workSheet = workBook.addWorksheet("Sheet 1");
 
-    workSheet.getCell("A1").value = "VOTER ID";
+    workSheet.getCell("A1").value = "No.";
     workSheet.getCell("B1").value = "NAME";
     workSheet.getCell("C1").value = "BARANGAY";
     workSheet.getCell("D1").value = "PRECINCT";
 
-    workSheet.getColumn(1).width = 25;
+    workSheet.getColumn(1).width = 8;
     workSheet.getColumn(2).width = 50;
     workSheet.getColumn(3).width = 30;
     workSheet.getColumn(4).width = 25;
@@ -198,24 +198,25 @@ export async function exportExcel(savePath: string, onlySelected = false) {
 
     for (let i = 0; i < voters.length; i++) {
       const row = i + 2;
-      workSheet.getCell(`A${row}`).value = voters[i].voterId;
+      workSheet.getCell(`A${row}`).value = i + 1;
       workSheet.getCell(`B${row}`).value = voters[i].name;
       workSheet.getCell(`C${row}`).value = voters[i].barangay;
       workSheet.getCell(`D${row}`).value = voters[i].precinct;
 
-      [`A${row}`, `B${row}`, `C${row}`, `D${row}`].forEach((cellRef) => {
+      [`A${row}`, `C${row}`, `D${row}`].forEach((cellRef) => {
         const cell = workSheet.getCell(cellRef);
-        cell.alignment = { horizontal: "left", vertical: "middle" };
+        cell.alignment = { horizontal: "center", vertical: "middle" };
         cell.font = { bold: true, size: 12 };
-
         if (!onlySelected && voters[i].isGiven === 1) {
-          cell.fill = {
-            type: "pattern",
-            pattern: "solid",
-            fgColor: { argb: "9E005DFF" },
-          };
+          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "9E005DFF" } };
         }
       });
+      const bCell = workSheet.getCell(`B${row}`);
+      bCell.alignment = { horizontal: "left", vertical: "middle" };
+      bCell.font = { bold: true, size: 12 };
+      if (!onlySelected && voters[i].isGiven === 1) {
+        bCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "9E005DFF" } };
+      }
     }
     await workBook.xlsx.writeFile(savePath);
 

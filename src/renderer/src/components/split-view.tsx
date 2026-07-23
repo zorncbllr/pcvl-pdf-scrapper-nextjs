@@ -10,6 +10,7 @@ import { DataTable } from "./data-table";
 import type { Voter } from "@/types/electron";
 import ExcelDropzone from "./excel-dropzone";
 import { SearchIcon, CheckCheck, Zap, Loader2, Eye, CircleMinus } from "lucide-react";
+import ExportButton from "./export-button";
 import { cn, wordsMatch } from "@/lib/utils";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
@@ -481,6 +482,9 @@ export default function SplitView({
                 <SelectItem value="unselected">Unselected</SelectItem>
               </SelectContent>
             </Select>
+            <div className="ml-auto">
+              <ExportButton />
+            </div>
           </div>
         </CardContent>
       </Card>
