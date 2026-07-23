@@ -322,6 +322,7 @@ export function DataTable({
   markTargetIndex,
   onSelectionChange,
   selectionSyncKey,
+  onBarangayChange,
 }: {
   data: Voter[];
   showActions?: boolean;
@@ -332,6 +333,7 @@ export function DataTable({
   markTargetIndex?: number | null;
   onSelectionChange?: (indices: number[]) => void;
   selectionSyncKey?: number;
+  onBarangayChange?: (barangay: string | null) => void;
 }) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(() => {
@@ -354,6 +356,12 @@ export function DataTable({
       return filtered;
     });
   }, [statusFilter]);
+  React.useEffect(() => {
+    const brgy = columnFilters.find((f) => f.id === "barangay")?.value as
+      | string
+      | undefined;
+    onBarangayChange?.(brgy ?? null);
+  }, [columnFilters, onBarangayChange]);
   const [columnVisibility, setColumnVisibility] =
     React.useState<VisibilityState>({ isGiven: false });
   const [rowSelection, setRowSelection] = React.useState<

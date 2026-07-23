@@ -61,6 +61,7 @@ export default function SplitView({
 }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [barangayFilter, setBarangayFilter] = useState<string | null>(null);
   const [markKey, setMarkKey] = useState(0);
   const [selectedRowIds, setSelectedRowIds] = useState<number[]>([]);
   const [selectionSyncKey, setSelectionSyncKey] = useState(0);
@@ -168,6 +169,27 @@ export default function SplitView({
 
   const norm = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
 
+  const namesMatch = (a: string, b: string): boolean => {
+    const parse = (s: string) => {
+      const [left, ...rest] = s.replace(/\./g, '').split(',');
+      const last = left.trim();
+      const parts = rest.join(',').trim().split(/\s+/).filter(Boolean);
+      return { last, first: parts[0] || '', middle: parts.slice(1) };
+    };
+    const pa = parse(a);
+    const pb = parse(b);
+    if (pa.last !== pb.last) return false;
+    if (pa.first !== pb.first) return false;
+    const base = (w: string) => w.replace(/\.$/, '');
+    const midEq = (x: string, y: string) =>
+      x === y || (base(x).length <= 2 && y.startsWith(base(x))) || (base(y).length <= 2 && x.startsWith(base(y)));
+    const ma = pa.middle;
+    const mb = pb.middle;
+    if (ma.length === 0 && mb.length === 0) return true;
+    if (ma.length === 0 || mb.length === 0) return true;
+    return ma.length === mb.length && ma.every((mw, i) => midEq(mw, mb[i]));
+  };
+
   const levenshtein = (a: string, b: string): number => {
     if (a.length < b.length) return levenshtein(b, a);
     if (b.length === 0) return a.length;
@@ -217,18 +239,25 @@ export default function SplitView({
       let matchedCell = "";
       let exact = false;
       const vn = norm(voter.name);
+      let bestCell = "";
+      let bestDist = Infinity;
       for (const cell of row) {
         if (!cell) continue;
         const cn = norm(cell);
         if (cn === vn) { matchedCell = cell; exact = true; break; }
         if (!matchedCell && levenshtein(cn, vn) <= 1) matchedCell = cell;
+        if (!matchedCell && namesMatch(cn, vn)) matchedCell = cell;
+        if (!matchedCell && wordsMatch(cell, voter.name)) matchedCell = cell;
+        const dist = levenshtein(cn, vn);
+        if (dist < bestDist) { bestDist = dist; bestCell = cell; }
       }
+      if (!matchedCell && bestCell) matchedCell = bestCell;
 
       pairs.push({
         voterId: voter.voterId,
         excelRowId,
         voterName: voter.name,
-        excelCell: matchedCell || row[0] || "",
+        excelCell: matchedCell || "",
         exact,
         barangay: voter.barangay,
         precinct: voter.precinct,
@@ -254,37 +283,59 @@ export default function SplitView({
     setAutoMatching(true);
     await new Promise((r) => setTimeout(r, 50));
     try {
+      const activeVoters = barangayFilter
+        ? voters.filter((v) => v.barangay === barangayFilter)
+        : voters;
+      if (activeVoters.length === 0) {
+        toast({ title: "No voters in selected barangay." });
+        return;
+      }
       const matchedVoterIds: number[] = [];
       const matchedRowIds: number[] = [];
+      const voterNames = activeVoters.map((v) => (v.name ? norm(v.name) : ""));
 
-      const voterNames = voters.map((v) => (v.name ? norm(v.name) : ""));
+      // Clear existing local pairs for filtered voters so stale cross-barangay matches don't appear in review
+      for (const v of activeVoters) {
+        pairMapRef.current.delete(v.voterId);
+      }
 
       for (const [ri, row] of preview.rows.entries()) {
         if (preview.headerRows?.[ri]) continue;
         const excelRowId = preview.rowIds[ri];
-        
-        let bestVoter: (typeof voters)[0] | null = null;
-        let bestDist = 0;
+
+        let bestVoter: (typeof activeVoters)[0] | null = null;
+        let bestPriority = Infinity;
         for (const cell of row) {
           if (!cell) continue;
           const cellValue = norm(cell);
 
-          for (let vi = 0; vi < voters.length; vi++) {
-            if (!voters[vi].name) continue;
+          for (let vi = 0; vi < activeVoters.length; vi++) {
+            if (!activeVoters[vi].name) continue;
             if (voterNames[vi] === cellValue) {
-              bestVoter = voters[vi];
-              bestDist = 0;
+              bestVoter = activeVoters[vi];
+              bestPriority = 0;
               break;
             }
-            const vn = voterNames[vi];
-            if (Math.abs(vn.length - cellValue.length) > 2) continue;
-            const dist = levenshtein(vn, cellValue);
-            if (dist <= 1 && (bestDist === 0 || dist < bestDist)) {
-              bestDist = dist;
-              bestVoter = voters[vi];
+            if (bestPriority > 1) {
+              const vn = voterNames[vi];
+              if (Math.abs(vn.length - cellValue.length) <= 2) {
+                const dist = levenshtein(vn, cellValue);
+                if (dist <= 1) {
+                  bestVoter = activeVoters[vi];
+                  bestPriority = 1;
+                }
+              }
+            }
+            if (bestPriority > 2 && namesMatch(cellValue, voterNames[vi])) {
+              bestVoter = activeVoters[vi];
+              bestPriority = 2;
+            }
+            if (bestPriority > 3 && wordsMatch(cell, activeVoters[vi].name)) {
+              bestVoter = activeVoters[vi];
+              bestPriority = 3;
             }
           }
-          if (bestVoter && bestDist === 0) break;
+          if (bestVoter && bestPriority === 0) break;
         }
         if (!bestVoter) continue;
 
@@ -313,7 +364,7 @@ export default function SplitView({
     } finally {
       setAutoMatching(false);
     }
-  }, [voters, preview, activeSheet, selectedRowIds, autoMatching]);
+  }, [voters, preview, activeSheet, selectedRowIds, autoMatching, barangayFilter]);
 
   return (
     <div className="space-y-4">
@@ -403,6 +454,7 @@ export default function SplitView({
                     toggleHighlightedRow={markKey}
                     selectionSyncKey={selectionSyncKey}
                     onSelectionChange={handleSelectionChange}
+                    onBarangayChange={setBarangayFilter}
                   />
                 </div>
               )}
