@@ -9,7 +9,8 @@ import {
 import { DataTable } from "./data-table";
 import type { Voter } from "@/types/electron";
 import ExcelDropzone from "./excel-dropzone";
-import { SearchIcon, CheckCheck, Zap, Loader2 } from "lucide-react";
+import { SearchIcon, CheckCheck, Zap, Loader2, Eye } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
 import { toast } from "@/hooks/use-toast";
@@ -20,6 +21,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "./ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "./ui/dialog";
 
 interface SheetPreview {
   headers: string[];
@@ -57,6 +64,10 @@ export default function SplitView({
   const [selectedRowIds, setSelectedRowIds] = useState<number[]>([]);
   const [selectionSyncKey, setSelectionSyncKey] = useState(0);
   const [autoMatching, setAutoMatching] = useState(false);
+  const [reviewPairs, setReviewPairs] = useState<
+    { voterName: string; excelCell: string; exact: boolean; barangay: string; precinct: string }[]
+  >([]);
+  const [reviewOpen, setReviewOpen] = useState(false);
   const initialized = useRef(false);
   const pairMapRef = useRef<Map<number, number>>(new Map());
 
@@ -157,6 +168,8 @@ export default function SplitView({
     setSelectionSyncKey((k) => k + 1);
   }, [searchQuery, voters, preview]);
 
+  const norm = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
+
   const levenshtein = (a: string, b: string): number => {
     if (a.length < b.length) return levenshtein(b, a);
     if (b.length === 0) return a.length;
@@ -178,6 +191,50 @@ export default function SplitView({
     return prev[b.length];
   };
 
+  const handleReview = useCallback(() => {
+    if (!preview) return;
+    const pairs: {
+      voterName: string;
+      excelCell: string;
+      exact: boolean;
+      barangay: string;
+      precinct: string;
+    }[] = [];
+    const seenVoters = new Set<number>();
+    for (const [voterId, excelRowId] of pairMapRef.current) {
+      if (seenVoters.has(voterId)) continue;
+      seenVoters.add(voterId);
+
+      const voter = voters.find((v) => v.voterId === voterId);
+      if (!voter) continue;
+
+      const ri = preview.rowIds.indexOf(excelRowId);
+      if (ri === -1) continue;
+      const row = preview.rows[ri];
+
+      let matchedCell = "";
+      let exact = false;
+      const vn = norm(voter.name);
+      for (const cell of row) {
+        if (!cell) continue;
+        const cn = norm(cell);
+        if (cn === vn) { matchedCell = cell; exact = true; break; }
+        if (!matchedCell && levenshtein(cn, vn) <= 1) matchedCell = cell;
+      }
+
+      pairs.push({
+        voterName: voter.name,
+        excelCell: matchedCell || row[0] || "",
+        exact,
+        barangay: voter.barangay,
+        precinct: voter.precinct,
+      });
+    }
+    pairs.sort((a, b) => a.voterName.localeCompare(b.voterName));
+    setReviewPairs(pairs);
+    setReviewOpen(true);
+  }, [voters, preview]);
+
   const handleAutoMatch = useCallback(async () => {
     if (!preview || voters.length === 0 || !activeSheet || autoMatching) return;
     setAutoMatching(true);
@@ -186,7 +243,6 @@ export default function SplitView({
       const matchedVoterIds: number[] = [];
       const matchedRowIds: number[] = [];
 
-      const norm = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
       const voterNames = voters.map((v) => (v.name ? norm(v.name) : ""));
 
       for (const [ri, row] of preview.rows.entries()) {
@@ -285,6 +341,15 @@ export default function SplitView({
                 <Zap className="h-4 w-4" />
               )}
             </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              className="shrink-0"
+              onClick={handleReview}
+              disabled={pairMapRef.current.size === 0}
+            >
+              <Eye className="h-4 w-4" />
+            </Button>
             <Select
               value={statusFilter}
               onValueChange={(value) => setStatusFilter(value)}
@@ -368,6 +433,58 @@ export default function SplitView({
           </CardContent>
         </Card>
       </div>
+
+      <Dialog open={reviewOpen} onOpenChange={setReviewOpen}>
+        <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Review Matched Pairs</DialogTitle>
+          </DialogHeader>
+          <div className="overflow-auto flex-1 min-h-0">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-left">
+                  <th className="h-10 px-2 font-medium text-muted-foreground">Voter Name</th>
+                  <th className="h-10 px-2 font-medium text-muted-foreground">Excel Cell</th>
+                  <th className="h-10 px-2 font-medium text-muted-foreground">Match</th>
+                  <th className="h-10 px-2 font-medium text-muted-foreground">Barangay</th>
+                  <th className="h-10 px-2 font-medium text-muted-foreground">Precinct</th>
+                </tr>
+              </thead>
+              <tbody>
+                {reviewPairs.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="h-24 text-center text-muted-foreground">
+                      No pairs to review.
+                    </td>
+                  </tr>
+                ) : (
+                  reviewPairs.map((p, i) => (
+                    <tr
+                      key={i}
+                      className={cn(
+                        "border-b",
+                        !p.exact && "bg-yellow-50 dark:bg-yellow-950/20",
+                      )}
+                    >
+                      <td className="p-2 align-middle">{p.voterName}</td>
+                      <td className="p-2 align-middle">{p.excelCell}</td>
+                      <td className="p-2 align-middle">
+                        {p.exact ? (
+                          <span className="text-green-600 dark:text-green-400">Exact</span>
+                        ) : (
+                          <span className="text-amber-600 dark:text-amber-400">Fuzzy</span>
+                        )}
+                      </td>
+                      <td className="p-2 align-middle">{p.barangay}</td>
+                      <td className="p-2 align-middle">{p.precinct}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
