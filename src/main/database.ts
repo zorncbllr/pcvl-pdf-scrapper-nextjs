@@ -33,6 +33,13 @@ export function initDatabase(): Database.Database {
     SELECT DISTINCT precinct, barangay FROM voter WHERE precinct != '' AND barangay != ''
   `);
 
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS voter_excel_pair (
+      voterId INTEGER PRIMARY KEY,
+      excelRowId INTEGER NOT NULL
+    )
+  `);
+
   return db;
 }
 

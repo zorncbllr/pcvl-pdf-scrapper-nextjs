@@ -24,6 +24,10 @@ const api = {
     ipcRenderer.invoke("voters:read-excel-sheet", payload),
   openPath: (filePath: string) =>
     ipcRenderer.invoke("shell:open-path", filePath),
+  getPairs: () => ipcRenderer.invoke("pairs:get-all"),
+  savePair: (data: { voterId: number; excelRowId: number }) =>
+    ipcRenderer.invoke("pairs:save", data),
+  clearPairs: () => ipcRenderer.invoke("pairs:clear"),
   saveExcelFile: (data: {
     buffer: number[];
     fileName: string;

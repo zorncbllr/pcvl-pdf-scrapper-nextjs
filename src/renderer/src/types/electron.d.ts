@@ -45,9 +45,16 @@ export interface ElectronAPI {
   }) => Promise<{
     headers: string[];
     rows: string[][];
+    rowIds: number[];
     merges: { row: number; col: number; rowspan: number; colspan: number }[];
   }>;
   openPath: (filePath: string) => Promise<{ success: boolean; msg: string }>;
+  getPairs: () => Promise<{ voterId: number; excelRowId: number }[]>;
+  savePair: (data: {
+    voterId: number;
+    excelRowId: number;
+  }) => Promise<void>;
+  clearPairs: () => Promise<void>;
   saveExcelFile: (data: {
     buffer: number[];
     fileName: string;

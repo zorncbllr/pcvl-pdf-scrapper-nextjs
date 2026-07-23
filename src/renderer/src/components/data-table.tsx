@@ -321,6 +321,9 @@ export function DataTable({
   searchQuery,
   statusFilter,
   toggleHighlightedRow,
+  markTargetIndex,
+  onSelectionChange,
+  selectionSyncKey,
 }: {
   data: Voter[];
   showActions?: boolean;
@@ -328,6 +331,9 @@ export function DataTable({
   searchQuery?: string;
   statusFilter?: string;
   toggleHighlightedRow?: number;
+  markTargetIndex?: number | null;
+  onSelectionChange?: (indices: number[]) => void;
+  selectionSyncKey?: number;
 }) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(() => {
@@ -471,10 +477,10 @@ export function DataTable({
   });
 
   React.useEffect(() => {
-    if (!toggleHighlightedRow || !globalFilter) return;
+    if (!toggleHighlightedRow || !globalFilter || markTargetIndex == null) return;
     const filteredRows = table.getRowModel().rows;
     if (filteredRows.length === 0) return;
-    const row = filteredRows[0];
+    const row = filteredRows.find((r) => parseInt(r.id) === markTargetIndex) ?? filteredRows[0];
     const newValue = !row.getIsSelected();
     setRowSelection((prev) => {
       const next = { ...prev };
@@ -492,6 +498,27 @@ export function DataTable({
     });
     setColumnFilters((prev) => [...prev]);
   }, [toggleHighlightedRow]);
+
+  React.useEffect(() => {
+    if (selectionSyncKey === undefined) return;
+    const sel: Record<string, boolean> = {};
+    data.forEach((voter, index) => {
+      if (voter.isGiven) sel[index] = true;
+    });
+    setRowSelection(sel);
+    setColumnFilters((prev) => [...prev]);
+  }, [selectionSyncKey]);
+
+  const prevSelectionRef = React.useRef(rowSelection);
+  React.useEffect(() => {
+    if (!onSelectionChange) return;
+    const current = Object.keys(rowSelection).filter((k) => rowSelection[k]).map(Number);
+    const prev = Object.keys(prevSelectionRef.current).filter((k) => prevSelectionRef.current[k]).map(Number);
+    if (current.length !== prev.length || current.some((v, i) => v !== prev[i])) {
+      onSelectionChange(current.sort((a, b) => a - b));
+    }
+    prevSelectionRef.current = rowSelection;
+  }, [rowSelection, onSelectionChange]);
 
   const parentRef = React.useRef<HTMLDivElement>(null);
   const rows = table.getRowModel().rows;

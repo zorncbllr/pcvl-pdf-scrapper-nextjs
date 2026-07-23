@@ -51,7 +51,14 @@ function getMerges(ws: any): MergeRange[] {
     .filter(Boolean) as MergeRange[];
 }
 
+let nextRowId = 1;
+
+function resetRowIdCounter() {
+  nextRowId = 1;
+}
+
 export async function readExcelFile(data: Buffer): Promise<{ sheets: string[] }> {
+  resetRowIdCounter();
   const wb = new Workbook();
   await wb.xlsx.load(data);
   return { sheets: wb.worksheets.map((ws) => ws.name) };
@@ -60,17 +67,17 @@ export async function readExcelFile(data: Buffer): Promise<{ sheets: string[] }>
 export async function readSheetData(
   data: Buffer,
   sheetName: string,
-): Promise<{ headers: string[]; rows: string[][]; merges: MergeRange[] }> {
+): Promise<{ headers: string[]; rows: string[][]; rowIds: number[]; merges: MergeRange[] }> {
   const wb = new Workbook();
   await wb.xlsx.load(data);
 
   const ws = wb.getWorksheet(sheetName);
-  if (!ws) return { headers: [], rows: [], merges: [] };
+  if (!ws) return { headers: [], rows: [], rowIds: [], merges: [] };
 
   const merges = getMerges(ws);
 
   const limit = Math.min(ws.rowCount, 101);
-  if (limit < 1) return { headers: [], rows: [], merges };
+  if (limit < 1) return { headers: [], rows: [], rowIds: [], merges };
 
   let colCount = 0;
   for (let r = 1; r <= limit; r++) {
@@ -80,7 +87,7 @@ export async function readSheetData(
     });
     if (lastCol > colCount) colCount = lastCol;
   }
-  if (colCount < 1) return { headers: [], rows: [], merges };
+  if (colCount < 1) return { headers: [], rows: [], rowIds: [], merges };
 
   const headers: string[] = new Array(colCount).fill("");
   ws.getRow(1).eachCell((cell, colNumber) => {
@@ -94,6 +101,7 @@ export async function readSheetData(
   });
 
   const rows: string[][] = [];
+  const rowIds: number[] = [];
   for (let r = 2; r <= limit; r++) {
     const row = ws.getRow(r);
     const values: string[] = new Array(colCount).fill("");
@@ -107,9 +115,10 @@ export async function readSheetData(
       }
     });
     rows.push(values);
+    rowIds.push(nextRowId++);
   }
 
-  return { headers, rows, merges };
+  return { headers, rows, rowIds, merges };
 }
 
 interface VoterRow {

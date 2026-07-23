@@ -21,6 +21,7 @@ export default function App() {
   const [preview, setPreview] = useState<{
     headers: string[];
     rows: string[][];
+    rowIds: number[];
     merges: { row: number; col: number; rowspan: number; colspan: number }[];
   } | null>(null);
   const [loadingSheet, setLoadingSheet] = useState(false);

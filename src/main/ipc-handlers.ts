@@ -97,6 +97,21 @@ export function registerIpcHandlers(mainWindow: BrowserWindow) {
     return { success: error === "", msg: error };
   });
 
+  ipcMain.handle("pairs:get-all", async () => {
+    return voterService.getAllPairs();
+  });
+
+  ipcMain.handle(
+    "pairs:save",
+    async (_, data: { voterId: number; excelRowId: number }) => {
+      voterService.savePair(data.voterId, data.excelRowId);
+    },
+  );
+
+  ipcMain.handle("pairs:clear", async () => {
+    voterService.clearPairs();
+  });
+
   ipcMain.handle(
     "excel-file:save",
     async (

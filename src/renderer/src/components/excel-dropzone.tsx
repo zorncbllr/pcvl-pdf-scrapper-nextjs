@@ -7,7 +7,7 @@ import {
   ChangeEvent,
   MouseEvent,
 } from "react";
-import { FileSpreadsheet, AlertCircle } from "lucide-react";
+import { FileSpreadsheet, AlertCircle, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -16,6 +16,7 @@ const ACCEPTED_EXT = [".xlsx", ".xls", ".csv"];
 interface SheetPreview {
   headers: string[];
   rows: string[][];
+  rowIds: number[];
   merges: { row: number; col: number; rowspan: number; colspan: number }[];
 }
 
@@ -27,7 +28,8 @@ interface ExcelDropzoneProps {
   onSheetClick?: (sheet: string) => void;
   loadingSheet?: boolean;
   searchQuery?: string;
-  selectedIndices?: number[];
+  statusFilter?: string;
+  selectedRowIds?: number[];
 }
 
 function isExcelFile(file: File): boolean {
@@ -43,7 +45,8 @@ export default function ExcelDropzone({
   onSheetClick,
   loadingSheet,
   searchQuery,
-  selectedIndices,
+  statusFilter,
+  selectedRowIds,
 }: ExcelDropzoneProps) {
   const [file, setFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -210,13 +213,20 @@ export default function ExcelDropzone({
               <div className="overflow-auto border rounded-md flex-1 min-h-0">
                 {(() => {
                   const q = (searchQuery ?? "").toLowerCase();
-                  const filteredEntries = q
-                    ? Array.from(preview.rows.entries()).filter(([, row]) =>
-                        row.some((cell) =>
-                          cell.toLowerCase().includes(q),
-                        ),
-                      )
-                    : Array.from(preview.rows.entries());
+                  const selectedSet = new Set(
+                    selectedRowIds ?? [],
+                  );
+                  const filteredEntries = Array.from(preview.rows.entries())
+                    .filter(([, row]) =>
+                      !q || row.some((cell) =>
+                        cell.toLowerCase().includes(q),
+                      ),
+                    )
+                    .filter(([ri]) =>
+                      !statusFilter || statusFilter === "all" ||
+                      (statusFilter === "selected" && selectedSet.has(preview.rowIds[ri])) ||
+                      (statusFilter === "unselected" && !selectedSet.has(preview.rowIds[ri])),
+                    );
                   if (filteredEntries.length === 0) {
                     return (
                       <div className="h-24 flex items-center justify-center text-muted-foreground text-sm">
@@ -231,6 +241,8 @@ export default function ExcelDropzone({
                     >
                       <thead>
                         <tr className="border-b">
+                          <th className="w-8 h-10 px-2 text-left align-middle font-medium text-muted-foreground border-r">
+                          </th>
                           {(() => {
                             const consumed = new Set<number>();
                             return preview.headers.map((h, ci) => {
@@ -266,26 +278,34 @@ export default function ExcelDropzone({
                       <tbody className="[&_tr:last-child]:border-0">
                         {(() => {
                           const consumed = new Set<string>();
-                          const selectedSet = new Set(
-                            selectedIndices ?? [],
-                          );
                           return filteredEntries.map(([ri, row]) => {
                             const rowHighlighted =
                               q && filteredEntries.length > 0 && ri === filteredEntries[0][0];
-                            const rowSelected = selectedSet.size > 0 && selectedSet.has(ri);
+                            const rowSelected = selectedSet.size > 0 && preview && selectedSet.has(preview.rowIds[ri]);
                             return (
                               <tr
                                 key={ri}
                                 className={cn(
                                   "border-b transition-colors",
-                                  rowHighlighted
-                                    ? "bg-primary text-primary-foreground"
-                                    : rowSelected
-                                      ? "bg-muted"
-                                      : "hover:bg-muted/50",
+                                  rowHighlighted && "bg-primary text-primary-foreground",
+                                  !rowHighlighted && rowSelected && "bg-muted",
+                                  !rowHighlighted && !rowSelected && "hover:bg-muted/50",
                                 )}
                                 style={{ height: "36px" }}
                               >
+                                <td
+                                  className={cn(
+                                    "p-2 align-middle border-r whitespace-nowrap w-8",
+                                    rowHighlighted
+                                      ? "text-primary-foreground"
+                                      : "text-muted-foreground",
+                                  )}
+                                  style={{ height: "36px" }}
+                                >
+                                  {rowSelected && (
+                                    <Check className="h-4 w-4 mx-auto" />
+                                  )}
+                                </td>
                                 {row.map((cell, ci) => {
                                   const key = `${ri}-${ci}`;
                                   if (consumed.has(key)) return null;

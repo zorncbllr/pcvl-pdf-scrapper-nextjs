@@ -141,6 +141,31 @@ export function getBarangayPrecincts(): {
     .all() as { precinct: string; barangay: string }[];
 }
 
+export function getAllPairs(): { voterId: number; excelRowId: number }[] {
+  const db = getDatabase();
+  return db.prepare("SELECT voterId, excelRowId FROM voter_excel_pair").all() as {
+    voterId: number;
+    excelRowId: number;
+  }[];
+}
+
+export function savePair(voterId: number, excelRowId: number) {
+  const db = getDatabase();
+  db.prepare(
+    "INSERT OR REPLACE INTO voter_excel_pair (voterId, excelRowId) VALUES (?, ?)",
+  ).run(voterId, excelRowId);
+}
+
+export function deletePair(voterId: number) {
+  const db = getDatabase();
+  db.prepare("DELETE FROM voter_excel_pair WHERE voterId = ?").run(voterId);
+}
+
+export function clearPairs() {
+  const db = getDatabase();
+  db.prepare("DELETE FROM voter_excel_pair").run();
+}
+
 function syncBarangayPrecinct(
   precinct: string,
   barangay: string
