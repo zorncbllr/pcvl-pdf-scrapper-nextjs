@@ -157,6 +157,27 @@ export default function SplitView({
     setSelectionSyncKey((k) => k + 1);
   }, [searchQuery, voters, preview]);
 
+  const levenshtein = (a: string, b: string): number => {
+    if (a.length < b.length) return levenshtein(b, a);
+    if (b.length === 0) return a.length;
+    let prev = new Uint8Array(b.length + 1);
+    let curr = new Uint8Array(b.length + 1);
+    for (let j = 0; j <= b.length; j++) prev[j] = j;
+    for (let i = 0; i < a.length; i++) {
+      curr[0] = i + 1;
+      for (let j = 0; j < b.length; j++) {
+        const cost = a[i] === b[j] ? 0 : 1;
+        curr[j + 1] = Math.min(
+          curr[j] + 1,
+          prev[j + 1] + 1,
+          prev[j] + cost,
+        );
+      }
+      [prev, curr] = [curr, prev];
+    }
+    return prev[b.length];
+  };
+
   const handleAutoMatch = useCallback(async () => {
     if (!preview || voters.length === 0 || !activeSheet || autoMatching) return;
     setAutoMatching(true);
@@ -166,33 +187,48 @@ export default function SplitView({
       const matchedRowIds: number[] = [];
 
       const norm = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
+      const voterNames = voters.map((v) => (v.name ? norm(v.name) : ""));
 
       for (const [ri, row] of preview.rows.entries()) {
         const excelRowId = preview.rowIds[ri];
 
         let bestVoter: (typeof voters)[0] | null = null;
+        let bestDist = 0;
         for (const cell of row) {
           if (!cell) continue;
           const cellValue = norm(cell);
-          const vi = voters.findIndex(
-            (v) => v.name && norm(v.name) === cellValue,
-          );
-          if (vi !== -1) {
-            bestVoter = voters[vi];
-            break;
+
+          for (let vi = 0; vi < voters.length; vi++) {
+            if (!voters[vi].name) continue;
+            if (voterNames[vi] === cellValue) {
+              bestVoter = voters[vi];
+              bestDist = 0;
+              break;
+            }
+            const vn = voterNames[vi];
+            if (Math.abs(vn.length - cellValue.length) > 2) continue;
+            const dist = levenshtein(vn, cellValue);
+            if (dist <= 1 && (bestDist === 0 || dist < bestDist)) {
+              bestDist = dist;
+              bestVoter = voters[vi];
+            }
           }
+          if (bestVoter && bestDist === 0) break;
         }
         if (!bestVoter) continue;
 
+        const alreadyPaired = pairMapRef.current.has(bestVoter.voterId);
         pairMapRef.current.set(bestVoter.voterId, excelRowId);
         bestVoter.isGiven = true;
-        matchedVoterIds.push(bestVoter.voterId);
-        matchedRowIds.push(excelRowId);
-        window.electronAPI.savePair({ voterId: bestVoter.voterId, excelRowId });
+        if (!alreadyPaired) {
+          matchedVoterIds.push(bestVoter.voterId);
+          matchedRowIds.push(excelRowId);
+          window.electronAPI.savePair({ voterId: bestVoter.voterId, excelRowId });
+        }
       }
 
       if (matchedVoterIds.length === 0) {
-        toast({ title: "No exact name matches found." });
+        toast({ title: "No matching voters found." });
         return;
       }
 
